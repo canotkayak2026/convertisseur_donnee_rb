@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convertisseur de cartes — Route Bleue</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --brand:#002569; --brand2:#003080; --accent:#009EC2; --accent2:#5CD4ED;
+    --mist:#F2F8FC; --ripple:#B8DDEF; --ink:#0D1E30; --ink-soft:#5A7A93;
+    --danger:#C05B38; --success:#2D9E6B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Montserrat',Arial,sans-serif; background:var(--mist); color:var(--ink);
+  }
+  .wrap{ max-width:900px; margin:0 auto; padding:28px 20px 80px; }
+  header{ margin-bottom:22px; }
+  header .eyebrow{
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--accent);
+    font-weight:700; display:block; margin-bottom:6px;
+  }
+  h1{ margin:0 0 8px; font-size:24px; font-weight:800; color:var(--brand); }
+  header p{ margin:0; color:var(--ink-soft); font-size:14px; line-height:1.5; max-width:640px; }
+
+  .card{
+    background:#fff; border:1px solid var(--ripple); border-radius:14px;
+    padding:18px 20px; margin-bottom:18px;
+  }
+  .card h2{
+    font-size:15px; margin:0 0 4px; color:var(--brand); font-weight:700;
+  }
+  .card .sub{ font-size:12.5px; color:var(--ink-soft); margin:0 0 14px; }
+
+  .dropzone{
+    border:2px dashed var(--ripple); border-radius:12px; padding:32px 20px;
+    text-align:center; color:var(--ink-soft); cursor:pointer; transition:border-color .15s, background .15s;
+    font-size:13.5px;
+  }
+  .dropzone.drag{ border-color:var(--accent); background:var(--mist); }
+  .dropzone strong{ color:var(--brand); }
+  input[type=file]{ display:none; }
+
+  .file-input-row{
+    display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;
+  }
+  .btn{
+    border:none; border-radius:10px; padding:10px 18px; font-family:inherit;
+    font-weight:700; font-size:12.5px; letter-spacing:0.02em; cursor:pointer;
+  }
+  .btn-primary{ background:var(--brand); color:#fff; }
+  .btn-primary:disabled{ opacity:0.4; cursor:not-allowed; }
+  .btn-ghost{
+    background:#fff; color:var(--brand); border:1.5px solid var(--brand);
+  }
+  .btn-sm{ padding:6px 12px; font-size:11px; border-radius:8px; }
+
+  .route-card{
+    display:flex; gap:14px; border:1px solid var(--ripple); border-radius:12px;
+    padding:14px; margin-bottom:12px; align-items:flex-start; flex-wrap:wrap;
+  }
+  .route-card .thumb{
+    width:96px; height:96px; border-radius:8px; background:var(--mist);
+    background-size:cover; background-position:center; flex:none;
+    display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--ink-soft);
+    border:1px solid var(--ripple);
+  }
+  .route-card .fields{
+    flex:1; min-width:260px; display:grid; grid-template-columns:1fr 1fr; gap:8px 10px;
+  }
+  .route-card .fields .full{ grid-column:1 / -1; }
+  .route-card label{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft);
+    font-weight:600; display:block; margin-bottom:3px;
+  }
+  .route-card input, .route-card select{
+    width:100%; padding:7px 9px; border-radius:7px; border:1px solid var(--ripple);
+    font-family:inherit; font-size:12.5px; background:#fff; color:var(--ink);
+  }
+  .route-card .status{
+    font-size:11px; margin-top:4px; font-weight:600;
+  }
+  .status.ok{ color:var(--success); }
+  .status.err{ color:var(--danger); }
+  .status.pending{ color:var(--ink-soft); }
+  .route-card .remove{
+    flex:none; background:none; border:none; color:var(--danger); font-size:11px;
+    font-weight:700; cursor:pointer; padding:4px;
+  }
+
+  .empty-state{
+    text-align:center; color:var(--ink-soft); font-size:13px; padding:20px;
+  }
+
+  #catalog-summary{ font-size:12.5px; color:var(--ink-soft); margin-top:8px; }
+  #catalog-summary b{ color:var(--brand); }
+
+  .log{
+    background:var(--brand); color:var(--mist); font-size:11.5px; border-radius:10px;
+    padding:12px 14px; max-height:160px; overflow-y:auto; white-space:pre-wrap;
+    font-family:ui-monospace, monospace; display:none;
+  }
+  .log.show{ display:block; }
+
+  .footer-note{
+    font-size:11.5px; color:var(--ink-soft); text-align:center; margin-top:24px; line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">Outil interne — CKQ</span>
+    <h1>Convertisseur de cartes GeoTIFF → PWA</h1>
+    <p>Glisse tes GeoTIFF de parcours ici, remplis les infos, puis télécharge le
+       pack complet (images + <code>catalog.json</code>) à déposer directement
+       dans le dépôt GitHub de l'appli. Tout se passe dans ton navigateur —
+       aucun fichier n'est envoyé sur un serveur.</p>
+  </header>
+
+  <div class="card">
+    <h2>1. Catalogue existant (optionnel)</h2>
+    <p class="sub">Charge le <code>catalog.json</code> déjà en ligne pour ajouter tes nouvelles cartes à la suite, sans écraser ce qui existe.</p>
+    <div class="file-input-row">
+      <button class="btn btn-ghost" id="btn-load-catalog">📂 Charger un catalog.json existant</button>
+      <input type="file" id="input-catalog" accept=".json">
+      <span id="catalog-load-status" style="font-size:12px; color:var(--ink-soft);"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Métadonnées lues sur les cartes (optionnel)</h2>
+    <p class="sub">Si Claude t'a généré un fichier de métadonnées (nom, distance, niveau) à partir de captures de tes cartes, charge-le ici. Quand tu déposeras un .tif dont le nom correspond, les champs se rempliront automatiquement.</p>
+    <div class="file-input-row">
+      <button class="btn btn-ghost" id="btn-load-metadata">📄 Charger un fichier de métadonnées</button>
+      <input type="file" id="input-metadata" accept=".json">
+      <span id="metadata-load-status" style="font-size:12px; color:var(--ink-soft);"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>3. Ajouter des cartes</h2>
+    <p class="sub">Formats acceptés: GeoTIFF (.tif / .tiff). Tu peux en glisser plusieurs à la fois.</p>
+    <div class="dropzone" id="dropzone">
+      <div><strong>Glisse tes fichiers .tif ici</strong></div>
+      <div>ou clique pour parcourir tes fichiers</div>
+    </div>
+    <input type="file" id="input-tif" accept=".tif,.tiff" multiple>
+  </div>
+
+  <div class="card">
+    <h2>4. Parcours à inclure</h2>
+    <p class="sub" id="routes-count">Aucune carte ajoutée pour l'instant.</p>
+    <div id="routes-list"></div>
+    <div class="empty-state" id="empty-state">Ajoute un ou des fichiers GeoTIFF ci-dessus pour commencer.</div>
+  </div>
+
+  <div class="card">
+    <h2>5. Générer le pack</h2>
+    <p class="sub">Ça va créer un fichier .zip avec toutes les images converties + le catalog.json à jour.</p>
+    <button class="btn btn-primary" id="btn-generate" disabled>⬇ Télécharger le pack (.zip)</button>
+    <div id="catalog-summary"></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="footer-note">
+    Une fois le .zip téléchargé : dézippe-le, puis glisse tout son contenu dans<br>
+    ton dépôt GitHub (à la racine), par-dessus les fichiers existants.
+  </div>
+
+</div>
+
+<script>
+/* ------------------------------------------------------------
+   État global
+------------------------------------------------------------ */
+/* ------------------------------------------------------------
+   Table de correspondance CKQ : code région touristique (2 chiffres)
+   et ID_PLN_EAU (couche "parcours") -> nom de rivière + région.
+   Générée à partir de Parcours_ExportTable_TableToExcel.xlsx.
+   Sert à pré-remplir automatiquement Région/Rivière à partir d'un
+   nom de fichier du type RB-<région>_<ID_PLN_EAU>_<nom>_VF.tif
+------------------------------------------------------------ */
+const RIVER_LOOKUP = {"3": {"name": "Rivière Assemetquagan", "region": "02", "regAdm": "11"}, "10": {"name": "Rivière Bonaventure", "region": "02", "regAdm": "11"}, "11": {"name": "Rivière Bonaventure Ouest", "region": "02", "regAdm": "11"}, "12": {"name": "Branche du Lac", "region": "02", "regAdm": "01"}, "13": {"name": "Rivière de l' Aigle 04", "region": "13", "regAdm": "07"}, "14": {"name": "Rivière Bazin", "region": "13", "regAdm": "15"}, "16": {"name": "Rivière Camachigama", "region": "14", "regAdm": "08"}, "17": {"name": "Rivière Canimiti", "region": "14", "regAdm": "08"}, "18": {"name": "Rivière Capitachouane", "region": "14", "regAdm": "08"}, "19": {"name": "Rivière Chochocouane", "region": "14", "regAdm": "08"}, "20": {"name": "Rivière Coulonge", "region": "13", "regAdm": "07"}, "22": {"name": "Rivière Coulonge Est", "region": "13", "regAdm": "07"}, "23": {"name": "Rivière Désert", "region": "13", "regAdm": "07"}, "24": {"name": "Rivière du Diable", "region": "11", "regAdm": "15"}, "25": {"name": "Rivière Dumoine", "region": "13", "regAdm": "08"}, "26": {"name": "Rivière Gatineau", "region": "13", "regAdm": "07"}, "27": {"name": "Rivière Gens de Terre", "region": "13", "regAdm": "07"}, "28": {"name": "Rivière Kiamika", "region": "11", "regAdm": "15"}, "29": {"name": "Rivière Kinojévis", "region": "14", "regAdm": "08"}, "30": {"name": "Rivière Kipawa", "region": "14", "regAdm": "08"}, "31": {"name": "Rivière du Lièvre", "region": "13", "regAdm": "07"}, "32": {"name": "Rivière Maskinongé 04", "region": "11", "regAdm": "15"}, "33": {"name": "Rivière Mazana", "region": "11", "regAdm": "15"}, "34": {"name": "Rivière Mitchinamécus", "region": "11", "regAdm": "15"}, "35": {"name": "Rivière Noire 04", "region": "13", "regAdm": "07"}, "36": {"name": "Rivière du Nord", "region": "11", "regAdm": "15"}, "37": {"name": "Rivière des Outaouais inférieure", "region": "13", "regAdm": "07"}, "38": {"name": "Rivière des Outaouais supérieure", "region": "14", "regAdm": "08"}, "39": {"name": "Rivière de la Petite Nation", "region": "13", "regAdm": "07"}, "40": {"name": "Rivière Picanoc", "region": "13", "regAdm": "07"}, "41": {"name": "Rivière Rouge", "region": "11", "regAdm": "15"}, "42": {"name": "Rivière du Sourd", "region": "11", "regAdm": "15"}, "43": {"name": "Rivière Archambault (Bride)", "region": "11", "regAdm": "15"}, "44": {"name": "Rivière d' Argent", "region": "11", "regAdm": "15"}, "45": {"name": "Rivière Beaven", "region": "11", "regAdm": "15"}, "46": {"name": "Rivière Blanche (Thurso)", "region": "13", "regAdm": "07"}, "47": {"name": "Rivière aux Bleuets 04", "region": "11", "regAdm": "15"}, "48": {"name": "Ruisseau Bonniebrook", "region": "11", "regAdm": "15"}, "49": {"name": "Rivière Le Boulé", "region": "11", "regAdm": "15"}, "50": {"name": "Rivière Bousquet", "region": "14", "regAdm": "08"}, "51": {"name": "Rivière Cachée 04", "region": "11", "regAdm": "15"}, "52": {"name": "Rivière Cerise", "region": "14", "regAdm": "08"}, "53": {"name": "Rivière du Coucou", "region": "13", "regAdm": "07"}, "54": {"name": "Ruisseau Coughlin", "region": "13", "regAdm": "07"}, "55": {"name": "Rivière Dalesville", "region": "11", "regAdm": "15"}, "56": {"name": "Rivière Dandurand", "region": "07", "regAdm": "04"}, "57": {"name": "Rivière Doncaster", "region": "11", "regAdm": "15"}, "58": {"name": "Rivière Hibou", "region": "13", "regAdm": "07"}, "59": {"name": "Rivière Kazabazua", "region": "13", "regAdm": "07"}, "60": {"name": "Rivière Saumon 04 (Kinonge)", "region": "13", "regAdm": "07"}, "61": {"name": "Rivière Lenoir", "region": "11", "regAdm": "15"}, "62": {"name": "Rivière Line", "region": "11", "regAdm": "15"}, "63": {"name": "Rivière à la Loutre", "region": "14", "regAdm": "08"}, "64": {"name": "Rivière Macaza", "region": "11", "regAdm": "15"}, "65": {"name": "Rivière Mascouche", "region": "10", "regAdm": "14"}, "66": {"name": "Rivière des Milles-Îles", "region": "19", "regAdm": "14"}, "67": {"name": "Rivière Nominingue", "region": "11", "regAdm": "15"}, "69": {"name": "Rivière de l' Orignal", "region": "13", "regAdm": "07"}, "70": {"name": "Rivière de l' Ouest", "region": "11", "regAdm": "15"}, "71": {"name": "Rivière Petawaga", "region": "11", "regAdm": "15"}, "73": {"name": "Rivière des Prairies", "region": "12", "regAdm": "14"}, "74": {"name": "Rivière Preston", "region": "13", "regAdm": "07"}, "75": {"name": "Petite rivière Rouge", "region": "13", "regAdm": "07"}, "76": {"name": "Rivière Serpent", "region": "13", "regAdm": "07"}, "77": {"name": "Rivière à Simon", "region": "11", "regAdm": "15"}, "78": {"name": "Rivière Tomasine", "region": "13", "regAdm": "07"}, "79": {"name": "Rivière Villemontel", "region": "14", "regAdm": "08"}, "80": {"name": "Rivière Batiscan", "region": "07", "regAdm": "04"}, "81": {"name": "Rivière Bostonnais", "region": "07", "regAdm": "04"}, "82": {"name": "Rivière Cabano", "region": "03", "regAdm": "01"}, "83": {"name": "Rivière Cascapédia", "region": "02", "regAdm": "11"}, "84": {"name": "Rivière Croche", "region": "07", "regAdm": "04"}, "85": {"name": "Rivière aux Éclairs", "region": "07", "regAdm": "03"}, "86": {"name": "Rivière Jacques-Cartier", "region": "04", "regAdm": "03"}, "87": {"name": "Rivière Petite Cascapédia Est", "region": "02", "regAdm": "11"}, "88": {"name": "Rivière Petite Cascapédia Ouest", "region": "02", "regAdm": "11"}, "89": {"name": "Rivière Petite Cascapédia", "region": "02", "regAdm": "11"}, "90": {"name": "Rivière Causapscal", "region": "02", "regAdm": "01"}, "91": {"name": "Rivière du Grand Pabos", "region": "02", "regAdm": "11"}, "92": {"name": "Rivière du Grand Pabos Ouest", "region": "02", "regAdm": "11"}, "93": {"name": "La Grande Rivière 01", "region": "02", "regAdm": "11"}, "94": {"name": "Rivière Humqui", "region": "02", "regAdm": "01"}, "95": {"name": "Rivière Kedgwick", "region": "03", "regAdm": "01"}, "96": {"name": "Rivière Madawaska", "region": "03", "regAdm": "01"}, "97": {"name": "Rivière Matapédia", "region": "02", "regAdm": "11"}, "98": {"name": "Rivière Noire, Grande", "region": "06", "regAdm": "12"}, "99": {"name": "Rivière du Petit Pabos", "region": "02", "regAdm": "11"}, "100": {"name": "Rivière Port-Daniel", "region": "02", "regAdm": "11"}, "101": {"name": "Rivière Jeannotte", "region": "04", "regAdm": "03"}, "102": {"name": "Rivière L'Assomption", "region": "10", "regAdm": "14"}, "103": {"name": "Rivière du Loup 05", "region": "07", "regAdm": "04"}, "104": {"name": "Rivière Malbaie 05", "region": "05", "regAdm": "03"}, "105": {"name": "Rivière Manouane 05", "region": "07", "regAdm": "04"}, "106": {"name": "Rivière Maskinongé 05", "region": "07", "regAdm": "04"}, "107": {"name": "Rivière Matawin", "region": "07", "regAdm": "04"}, "108": {"name": "Rivière Mékinac", "region": "07", "regAdm": "04"}, "109": {"name": "Rivière du Milieu", "region": "10", "regAdm": "14"}, "110": {"name": "Rivière Montmorency", "region": "04", "regAdm": "03"}, "111": {"name": "Rivière Ouareau", "region": "10", "regAdm": "14"}, "112": {"name": "Rivière Pierriche", "region": "07", "regAdm": "04"}, "113": {"name": "Rivière du Poste", "region": "10", "regAdm": "14"}, "114": {"name": "Rivière aux Rats", "region": "07", "regAdm": "04"}, "115": {"name": "Rivière aux Rognons", "region": "07", "regAdm": "04"}, "116": {"name": "Rivière Ruban", "region": "07", "regAdm": "04"}, "117": {"name": "Rivière Sainte-Anne 05", "region": "07", "regAdm": "04"}, "118": {"name": "Bras du Nord 05", "region": "04", "regAdm": "03"}, "119": {"name": "Rivière Sainte-Anne 05 (du Nord)", "region": "04", "regAdm": "03"}, "120": {"name": "Rivière Saint-Maurice", "region": "07", "regAdm": "04"}, "121": {"name": "Rivière Shawinigan", "region": "07", "regAdm": "04"}, "122": {"name": "Rivière Trenche", "region": "07", "regAdm": "04"}, "123": {"name": "Rivière Ristigouche", "region": "02", "regAdm": "11"}, "124": {"name": "Rivière Saint-Jean Sud-Ouest", "region": "06", "regAdm": "12"}, "125": {"name": "Rivière Saint-Roch", "region": "06", "regAdm": "12"}, "126": {"name": "Rivière Squatec", "region": "03", "regAdm": "01"}, "127": {"name": "Rivière Touladi", "region": "03", "regAdm": "01"}, "128": {"name": "Rivière Hall", "region": "02", "regAdm": "11"}, "129": {"name": "Rivière Noire Nord-Ouest", "region": "06", "regAdm": "12"}, "130": {"name": "Rivière Nouvelle", "region": "02", "regAdm": "11"}, "131": {"name": "Rivière Vermillon", "region": "07", "regAdm": "04"}, "132": {"name": "Rivière Villiers", "region": "10", "regAdm": "14"}, "133": {"name": "Rivière Windigo", "region": "07", "regAdm": "04"}, "134": {"name": "Rivière de l' Achigan", "region": "10", "regAdm": "14"}, "135": {"name": "Rivière du Cap Rouge", "region": "04", "regAdm": "03"}, "136": {"name": "Rivière à la Chienne", "region": "07", "regAdm": "04"}, "137": {"name": "Rivière Coucoucache", "region": "07", "regAdm": "04"}, "138": {"name": "Rivière Flamand", "region": "07", "regAdm": "04"}, "139": {"name": "Rivière Flamand Ouest", "region": "07", "regAdm": "04"}, "140": {"name": "Rivière Flapjack", "region": "07", "regAdm": "04"}, "141": {"name": "Rivière du Gouffre", "region": "05", "regAdm": "03"}, "142": {"name": "Rivière Bécancour", "region": "20", "regAdm": "17"}, "143": {"name": "Rivière des Hurons", "region": "04", "regAdm": "03"}, "144": {"name": "Rivière Laviolette", "region": "10", "regAdm": "14"}, "145": {"name": "Rivière Livernois", "region": "07", "regAdm": "04"}, "146": {"name": "Rivière Cap-Chat", "region": "02", "regAdm": "11"}, "147": {"name": "Rivière Mastigouche", "region": "10", "regAdm": "14"}, "148": {"name": "Rivière Chaudière", "region": "06", "regAdm": "12"}, "149": {"name": "Rivière Matawin Ouest", "region": "10", "regAdm": "14"}, "150": {"name": "Rivière du Chêne", "region": "06", "regAdm": "12"}, "152": {"name": "Rivière Dartmouth", "region": "02", "regAdm": "11"}, "153": {"name": "Rivière Etchemin", "region": "06", "regAdm": "12"}, "154": {"name": "Rivière du Milieu (Mékinac)", "region": "07", "regAdm": "04"}, "155": {"name": "Rivière Mondonac", "region": "07", "regAdm": "04"}, "156": {"name": "Rivière Loup 02 (Chaudière)", "region": "06", "regAdm": "12"}, "157": {"name": "Rivière des Neiges", "region": "04", "regAdm": "03"}, "158": {"name": "Rivière Madeleine", "region": "02", "regAdm": "11"}, "160": {"name": "Rivière Neilson", "region": "04", "regAdm": "03"}, "161": {"name": "Rivière Noire 05 (Ste-Anne)", "region": "04", "regAdm": "03"}, "162": {"name": "Rivière Matane", "region": "02", "regAdm": "01"}, "163": {"name": "Rivière Noire 05 (Lanaudière)", "region": "10", "regAdm": "14"}, "164": {"name": "Rivière Oskélanéo", "region": "07", "regAdm": "04"}, "165": {"name": "Rivière Mistigougèche", "region": "02", "regAdm": "01"}, "166": {"name": "Rivière aux Pommes", "region": "04", "regAdm": "03"}, "168": {"name": "Rivière Mitis", "region": "02", "regAdm": "01"}, "170": {"name": "Rivière Portneuf 05", "region": "04", "regAdm": "03"}, "171": {"name": "Rivière Neigette", "region": "02", "regAdm": "01"}, "172": {"name": "Rivière Raimbault", "region": "15", "regAdm": "02"}, "173": {"name": "Rivière Rimouski", "region": "03", "regAdm": "01"}, "174": {"name": "Rivière Rouge Nord-Ouest", "region": "10", "regAdm": "14"}, "175": {"name": "Rivière Saint-Charles 05", "region": "04", "regAdm": "03"}, "176": {"name": "Rivière Sautauriski", "region": "04", "regAdm": "03"}, "177": {"name": "Rivière Tourilli", "region": "04", "regAdm": "03"}, "178": {"name": "Rivière Tawachiche", "region": "07", "regAdm": "04"}, "179": {"name": "Rivière Wabano", "region": "07", "regAdm": "04"}, "180": {"name": "Rivière Wessonneau", "region": "07", "regAdm": "04"}, "181": {"name": "Rivière Ashuapmushan", "region": "15", "regAdm": "02"}, "182": {"name": "La Belle rivière", "region": "15", "regAdm": "02"}, "184": {"name": "Rivière du Chef", "region": "15", "regAdm": "02"}, "185": {"name": "Rivière Daniel", "region": "15", "regAdm": "02"}, "186": {"name": "Rivière aux Écorces", "region": "15", "regAdm": "02"}, "187": {"name": "Rivière Manouane 06", "region": "15", "regAdm": "02"}, "188": {"name": "Rivière Métabetchouane", "region": "15", "regAdm": "02"}, "189": {"name": "Rivière Mistassibi", "region": "15", "regAdm": "02"}, "190": {"name": "Rivière Mistassibi Nord-Est", "region": "15", "regAdm": "02"}, "191": {"name": "Rivière Mistassini", "region": "15", "regAdm": "02"}, "192": {"name": "Rivière Nestaocano", "region": "15", "regAdm": "02"}, "193": {"name": "Rivière Normandin", "region": "15", "regAdm": "02"}, "194": {"name": "Rivière Ouasiemsca", "region": "15", "regAdm": "02"}, "195": {"name": "Rivière Péribonka", "region": "15", "regAdm": "02"}, "196": {"name": "Rivière Pikauba", "region": "15", "regAdm": "02"}, "197": {"name": "Rivière Sainte-Marguerite 06", "region": "16", "regAdm": "09"}, "198": {"name": "Rivière Sainte-Marguerite Nord-Est", "region": "16", "regAdm": "09"}, "199": {"name": "Rivière Saguenay", "region": "15", "regAdm": "09"}, "200": {"name": "Rivière des Aulnaies", "region": "15", "regAdm": "02"}, "201": {"name": "Rivière Brûle-Neige", "region": "15", "regAdm": "02"}, "202": {"name": "Rivière aux Canots", "region": "15", "regAdm": "02"}, "203": {"name": "Rivière Cyriac", "region": "15", "regAdm": "02"}, "204": {"name": "Rivière Chigoubiche", "region": "15", "regAdm": "02"}, "205": {"name": "Rivière des Commissaires", "region": "15", "regAdm": "02"}, "206": {"name": "Rivière aux Écorces Nord-Est", "region": "04", "regAdm": "03"}, "207": {"name": "Rivière Ha! Ha!", "region": "15", "regAdm": "02"}, "208": {"name": "Rivière à Mars", "region": "15", "regAdm": "02"}, "209": {"name": "Rivière Métascouac", "region": "04", "regAdm": "03"}, "210": {"name": "Rivière du Moulin", "region": "15", "regAdm": "02"}, "211": {"name": "Rivière Ouiatchouan", "region": "15", "regAdm": "02"}, "212": {"name": "Rivière Ouiatchouaniche", "region": "15", "regAdm": "02"}, "213": {"name": "Petite rivière Péribonka", "region": "15", "regAdm": "02"}, "214": {"name": "Rivière Petit Saguenay", "region": "15", "regAdm": "02"}, "215": {"name": "Petite rivière Pikauba", "region": "15", "regAdm": "02"}, "216": {"name": "Rivière aux Sables 06", "region": "15", "regAdm": "02"}, "217": {"name": "Rivière Saint-Jean 06", "region": "15", "regAdm": "02"}, "218": {"name": "Rivière Shipshaw", "region": "15", "regAdm": "02"}, "219": {"name": "Rivière Valin", "region": "15", "regAdm": "02"}, "220": {"name": "Rivière Aguanish", "region": "17", "regAdm": "09"}, "221": {"name": "Rivière Attic", "region": "14", "regAdm": "08"}, "222": {"name": "Rivière Broadback", "region": "18", "regAdm": "10"}, "223": {"name": "Rivière Chalifour", "region": "18", "regAdm": "10"}, "224": {"name": "Rivière Chibougamau", "region": "18", "regAdm": "10"}, "225": {"name": "Rivière Cuvillier", "region": "14", "regAdm": "08"}, "226": {"name": "Rivière Harricana", "region": "18", "regAdm": "10"}, "227": {"name": "Rivière Kitchigama", "region": "18", "regAdm": "10"}, "228": {"name": "Rivière Laflamme", "region": "18", "regAdm": "10"}, "229": {"name": "Rivière à la Marte", "region": "18", "regAdm": "10"}, "230": {"name": "Rivière Mégiscane 08", "region": "14", "regAdm": "08"}, "231": {"name": "Rivière Nottaway", "region": "18", "regAdm": "10"}, "232": {"name": "Rivière Opawica", "region": "18", "regAdm": "10"}, "233": {"name": "Rivière Pontax", "region": "18", "regAdm": "10"}, "234": {"name": "Rivière Rupert", "region": "18", "regAdm": "10"}, "235": {"name": "Rivière Taschereau", "region": "14", "regAdm": "08"}, "236": {"name": "Rivière Témiscamie", "region": "18", "regAdm": "10"}, "237": {"name": "Rivière Turgeon", "region": "18", "regAdm": "10"}, "238": {"name": "Rivière Wetetnagami", "region": "18", "regAdm": "10"}, "240": {"name": "Rivière Allard", "region": "18", "regAdm": "10"}, "241": {"name": "Rivière Assinica", "region": "18", "regAdm": "10"}, "242": {"name": "Rivière Bell", "region": "18", "regAdm": "10"}, "243": {"name": "Rivière Bourlamaque", "region": "14", "regAdm": "08"}, "244": {"name": "Rivière du Canyon", "region": "14", "regAdm": "08"}, "245": {"name": "Rivière Capousacataca", "region": "14", "regAdm": "08"}, "246": {"name": "Rivière Closse", "region": "14", "regAdm": "08"}, "247": {"name": "Rivière Kekek", "region": "14", "regAdm": "08"}, "248": {"name": "Rivière La Sarre", "region": "14", "regAdm": "08"}, "249": {"name": "Rivière Louvicourt", "region": "14", "regAdm": "08"}, "250": {"name": "Rivière Natastan", "region": "18", "regAdm": "10"}, "251": {"name": "Rivière Nicobi", "region": "18", "regAdm": "10"}, "252": {"name": "Rivière à la Perche", "region": "18", "regAdm": "10"}, "253": {"name": "Rivière Saint-Cyr", "region": "18", "regAdm": "10"}, "254": {"name": "Rivière Waswanipi", "region": "18", "regAdm": "10"}, "255": {"name": "Grande rivière de la Baleine", "region": "21", "regAdm": "10"}, "256": {"name": "Rivière Eastmain", "region": "18", "regAdm": "10"}, "257": {"name": "Rivière à l' Eau Claire", "region": "21", "regAdm": "10"}, "258": {"name": "Rivière Innuksuac", "region": "21", "regAdm": "10"}, "259": {"name": "Rivière de Povirnituk", "region": "21", "regAdm": "10"}, "260": {"name": "Petite rivière de la Baleine", "region": "21", "regAdm": "10"}, "261": {"name": "Rivière au Castor", "region": "18", "regAdm": "10"}, "262": {"name": "Rivière au Castor Est", "region": "18", "regAdm": "10"}, "263": {"name": "Rivière à l' Eau Froide", "region": "18", "regAdm": "10"}, "264": {"name": "La Grande Rivière 09", "region": "18", "regAdm": "10"}, "265": {"name": "Rivière Kanaaupscow", "region": "18", "regAdm": "10"}, "266": {"name": "Rivière Kogaluc", "region": "21", "regAdm": "10"}, "267": {"name": "Rivière Nastapoka", "region": "21", "regAdm": "10"}, "268": {"name": "Rivière Opinaca", "region": "18", "regAdm": "10"}, "269": {"name": "Rivière Sakami", "region": "18", "regAdm": "10"}, "270": {"name": "Rivière du Vieux comptoir", "region": "18", "regAdm": "10"}, "271": {"name": "Rivière Arnaud", "region": "21", "regAdm": "10"}, "272": {"name": "Rivière à la Baleine", "region": "21", "regAdm": "10"}, "273": {"name": "Rivière Caniapiscau", "region": "21", "regAdm": "10"}, "274": {"name": "Rivière aux Feuilles", "region": "21", "regAdm": "10"}, "275": {"name": "Rivière George", "region": "21", "regAdm": "10"}, "276": {"name": "Rivière Koroc", "region": "21", "regAdm": "10"}, "277": {"name": "Rivière aux Mélèzes", "region": "21", "regAdm": "10"}, "278": {"name": "Rivière Swampy Bay", "region": "21", "regAdm": "10"}, "279": {"name": "Rivière Wheeler", "region": "21", "regAdm": "10"}, "280": {"name": "Rivière De Pas", "region": "21", "regAdm": "10"}, "281": {"name": "Rivière Koksoak", "region": "21", "regAdm": "10"}, "282": {"name": "Rivière Murdoch", "region": "21", "regAdm": "10"}, "283": {"name": "Rivière du Sable", "region": "21", "regAdm": "10"}, "284": {"name": "Rivière Savalette", "region": "21", "regAdm": "10"}, "285": {"name": "Rivière Sérigny", "region": "21", "regAdm": "10"}, "286": {"name": "Rivière Vachon", "region": "21", "regAdm": "10"}, "287": {"name": "Rivière des Anglais 03", "region": "09", "regAdm": "16"}, "288": {"name": "Rivière Châteauguay", "region": "09", "regAdm": "16"}, "289": {"name": "Rivière Coaticook", "region": "08", "regAdm": "05"}, "290": {"name": "Rivière Eaton Nord", "region": "08", "regAdm": "05"}, "291": {"name": "Rivière Magog", "region": "08", "regAdm": "05"}, "292": {"name": "Rivière Massawippi", "region": "08", "regAdm": "05"}, "293": {"name": "Rivière Missisquoi", "region": "08", "regAdm": "05"}, "294": {"name": "Rivière Missisquoi Nord", "region": "08", "regAdm": "05"}, "295": {"name": "Rivière Moe", "region": "08", "regAdm": "05"}, "296": {"name": "Rivière Nicolet Sud-Ouest", "region": "20", "regAdm": "17"}, "297": {"name": "Rivière Richelieu", "region": "09", "regAdm": "16"}, "298": {"name": "Rivière au Saumon 03-02-30-00", "region": "08", "regAdm": "05"}, "299": {"name": "Rivière au Saumon 03-02-80-00", "region": "08", "regAdm": "05"}, "300": {"name": "Rivière aux Saumons (Ascot)", "region": "08", "regAdm": "05"}, "301": {"name": "Rivière Saint-François", "region": "20", "regAdm": "17"}, "302": {"name": "Rivière Tomifobia", "region": "08", "regAdm": "05"}, "303": {"name": "Rivière Ulverton", "region": "08", "regAdm": "05"}, "304": {"name": "Rivière Watopeka", "region": "08", "regAdm": "05"}, "305": {"name": "Rivière Yamaska", "region": "20", "regAdm": "17"}, "306": {"name": "Rivière L'Acadie", "region": "09", "regAdm": "16"}, "307": {"name": "Rivière aux Brochets", "region": "08", "regAdm": "05"}, "308": {"name": "Rivière Bulstrode", "region": "20", "regAdm": "17"}, "309": {"name": "Rivière Ditton", "region": "08", "regAdm": "05"}, "310": {"name": "Rivière Eaton", "region": "08", "regAdm": "05"}, "311": {"name": "Rivière Nicolet", "region": "20", "regAdm": "17"}, "312": {"name": "Rivière Noire 03", "region": "09", "regAdm": "16"}, "313": {"name": "Rivière le Renne", "region": "09", "regAdm": "16"}, "314": {"name": "Rivière Stoke", "region": "08", "regAdm": "05"}, "315": {"name": "Rivière du Sud 03", "region": "09", "regAdm": "16"}, "316": {"name": "Rivière aux Anglais", "region": "16", "regAdm": "09"}, "317": {"name": "Rivière Betsiamites", "region": "16", "regAdm": "09"}, "318": {"name": "Rivière Franquelin", "region": "16", "regAdm": "09"}, "319": {"name": "Rivière Godbout", "region": "16", "regAdm": "09"}, "320": {"name": "Rivière MacDonald", "region": "17", "regAdm": "09"}, "321": {"name": "Rivière Magpie", "region": "17", "regAdm": "09"}, "322": {"name": "Rivière Magpie Ouest", "region": "17", "regAdm": "09"}, "323": {"name": "Rivière Manitou", "region": "17", "regAdm": "09"}, "324": {"name": "Rivière Moisie", "region": "17", "regAdm": "09"}, "325": {"name": "Rivière Mouchalagane", "region": "17", "regAdm": "09"}, "326": {"name": "Rivière Natashquan", "region": "17", "regAdm": "09"}, "327": {"name": "Rivière Nipissis", "region": "17", "regAdm": "09"}, "328": {"name": "Rivière Pentecôte", "region": "17", "regAdm": "09"}, "329": {"name": "Rivière du Petit Mécatina", "region": "17", "regAdm": "09"}, "330": {"name": "Rivière Portneuf 07", "region": "16", "regAdm": "09"}, "331": {"name": "Rivière aux Rochers", "region": "17", "regAdm": "09"}, "332": {"name": "Rivière Romaine", "region": "17", "regAdm": "09"}, "333": {"name": "Rivière Sainte-Marguerite 07", "region": "17", "regAdm": "09"}, "334": {"name": "Rivière Saint-Jean 07", "region": "17", "regAdm": "09"}, "335": {"name": "Rivière Toulnustouc", "region": "16", "regAdm": "09"}, "336": {"name": "Rivière Wacouno", "region": "17", "regAdm": "09"}, "337": {"name": "Rivière Carheil", "region": "17", "regAdm": "09"}, "338": {"name": "Rivière Grasse", "region": "17", "regAdm": "09"}, "339": {"name": "Rivière aux Pékans", "region": "17", "regAdm": "09"}, "340": {"name": "Rivière aux Sables 07", "region": "15", "regAdm": "02"}, "341": {"name": "Rivière du Sault aux Cochons", "region": "16", "regAdm": "09"}, "342": {"name": "Rivière de la Trinité", "region": "16", "regAdm": "09"}, "343": {"name": "Rivière Malbaie 02", "region": "02", "regAdm": "11"}, "344": {"name": "Rivière Sainte-Anne 02 (Gaspésie)", "region": "02", "regAdm": "11"}, "345": {"name": "Rivière Saint-Jean 02", "region": "02", "regAdm": "11"}, "346": {"name": "Rivière du Sud-Ouest", "region": "03", "regAdm": "01"}, "347": {"name": "Rivière York", "region": "02", "regAdm": "11"}, "348": {"name": "Rivière Beaurivage", "region": "06", "regAdm": "12"}, "349": {"name": "Rivière du Cinq", "region": "06", "regAdm": "12"}, "350": {"name": "Rivière Henri", "region": "06", "regAdm": "12"}, "351": {"name": "Rivière du Loup 02", "region": "03", "regAdm": "01"}, "352": {"name": "Rivière Ouelle", "region": "03", "regAdm": "01"}, "353": {"name": "Bras Saint-Victor", "region": "06", "regAdm": "12"}, "354": {"name": "Rivière du Sud 02", "region": "06", "regAdm": "12"}, "360": {"name": "Rivière Seignelay", "region": "17", "regAdm": "09"}, "361": {"name": "Rivière de l' Aigle 08", "region": "18", "regAdm": "10"}, "362": {"name": "Réserve faunique Duchénier", "region": "03", "regAdm": "01"}, "363": {"name": "Parc de la Gatineau", "region": "13", "regAdm": "07"}, "364": {"name": "Territoire Kipawa", "region": "14", "regAdm": "08"}, "365": {"name": "Réserve faunique Papineau Labelle", "region": "13", "regAdm": "07"}, "367": {"name": "Territoire de la Haute Batiscan", "region": "07", "regAdm": "04"}, "368": {"name": "Territoire de la Manouane", "region": "10", "regAdm": "14"}, "369": {"name": "Parc national de la Mauricie", "region": "07", "regAdm": "04"}, "370": {"name": "Parc Régional Lac Long-Montauban", "region": "04", "regAdm": "03"}, "371": {"name": "Réserve faunique Mastigouche", "region": "07", "regAdm": "04"}, "372": {"name": "Réserve faunique de Portneuf", "region": "04", "regAdm": "03"}, "373": {"name": "Réserve faunique du Saint-Maurice", "region": "07", "regAdm": "04"}, "374": {"name": "Réservoir Gouin", "region": "07", "regAdm": "04"}, "375": {"name": "Parc Frontenac", "region": "08", "regAdm": "05"}, "377": {"name": "Route des Montagnais", "region": "17", "regAdm": "09"}, "380": {"name": "Patapédia", "region": "02", "regAdm": "11"}, "381": {"name": "Rivière Saseginaga", "region": "14", "regAdm": "08"}, "2": {"name": "Rivière du Bic", "region": "03", "regAdm": "01"}, "383": {"name": "Canot Camping la Vérendrye", "region": "13", "regAdm": "07"}, "366": {"name": "Poisson Blanc / Trente-et-un-Mille", "region": "13", "regAdm": "07"}, "382": {"name": "Rivière de la Grande Loutre", "region": "15", "regAdm": "02"}, "384": {"name": "Rivière Ignace", "region": "13", "regAdm": "07"}, "385": {"name": "Rivière du Sault au Mouton", "region": "16", "regAdm": "09"}, "386": {"name": "Rivière Delestre", "region": "14", "regAdm": "08"}, "388": {"name": "Rivière aux Rats 06", "region": "15", "regAdm": "02"}, "1": {"name": "Rivière du Pin", "region": "06", "regAdm": "12"}, "4": {"name": "Bras du Nord 06", "region": "15", "regAdm": "02"}, "5": {"name": "Bras Saint-Nicolas", "region": "06", "regAdm": "12"}, "15": {"name": "Ruisseau Capri", "region": "11", "regAdm": "15"}, "159": {"name": "Rivière Charest", "region": "07", "regAdm": "04"}, "355": {"name": "Rivière Jean-Venne", "region": "10", "regAdm": "14"}, "68": {"name": "Ruisseau à l' Eau Chaude", "region": "03", "regAdm": "01"}, "167": {"name": "Ruisseau à l' Eau Morte", "region": "10", "regAdm": "14"}, "183": {"name": "Rivière à Pierre 05", "region": "04", "regAdm": "03"}, "391": {"name": "Rivière Alex 06", "region": "15", "regAdm": "02"}, "392": {"name": "Rivière Arnold", "region": "08", "regAdm": "05"}, "393": {"name": "Rivière des (embouchure riv. Famine) Abénaquis", "region": "06", "regAdm": "12"}, "396": {"name": "Rivière aux Ormes 02", "region": "06", "regAdm": "12"}, "398": {"name": "Rivière Bélinge", "region": "13", "regAdm": "07"}, "404": {"name": "Rivière Boyer", "region": "06", "regAdm": "12"}, "406": {"name": "Bras d' Henri", "region": "06", "regAdm": "12"}, "408": {"name": "Ruisseau Bullard", "region": "20", "regAdm": "17"}, "409": {"name": "Rivière Calway", "region": "06", "regAdm": "12"}, "410": {"name": "Rivière Camie", "region": "18", "regAdm": "10"}, "413": {"name": "Rivière Charpentier", "region": "21", "regAdm": "10"}, "416": {"name": "Rivière Clinton", "region": "08", "regAdm": "05"}, "417": {"name": "Rivière de la Corneille 04", "region": "13", "regAdm": "07"}, "418": {"name": "Rivière de la Fourche (Armagh)", "region": "06", "regAdm": "12"}, "419": {"name": "Rivière de Maurès", "region": "18", "regAdm": "10"}, "420": {"name": "Rivière Delay", "region": "21", "regAdm": "10"}, "421": {"name": "Rivière des (embouchure riv. Etchemin) Abénaquis", "region": "06", "regAdm": "12"}, "422": {"name": "Rivière des Fleurs", "region": "06", "regAdm": "12"}, "424": {"name": "Rivière des Perdrix", "region": "06", "regAdm": "12"}, "425": {"name": "Rivière des Pins", "region": "20", "regAdm": "17"}, "427": {"name": "Rivière du Berger", "region": "04", "regAdm": "03"}, "428": {"name": "Rivière du Gué", "region": "21", "regAdm": "10"}, "431": {"name": "Rivière Filkars", "region": "06", "regAdm": "12"}, "432": {"name": "Rivière Ford", "region": "21", "regAdm": "10"}, "433": {"name": "Ruisseau Francoeur", "region": "06", "regAdm": "12"}, "435": {"name": "Rivière Gazeau", "region": "15", "regAdm": "02"}, "436": {"name": "Rivière Gentilly", "region": "20", "regAdm": "17"}, "437": {"name": "Rivière Gervais", "region": "15", "regAdm": "02"}, "444": {"name": "Rivière Joir", "region": "17", "regAdm": "09"}, "445": {"name": "Rivière Joseph 04", "region": "13", "regAdm": "07"}, "447": {"name": "Rivière La Chevrotière", "region": "04", "regAdm": "03"}, "448": {"name": "Lacs Albanel et Mistassini", "region": "18", "regAdm": "10"}, "450": {"name": "Lac Cinconsine", "region": "07", "regAdm": "04"}, "451": {"name": "Lac Lusignant", "region": "14", "regAdm": "08"}, "453": {"name": "Rivière Lorette", "region": "04", "regAdm": "03"}, "456": {"name": "Rivière Matonipi", "region": "16", "regAdm": "09"}, "460": {"name": "Rivière Morigeau", "region": "06", "regAdm": "12"}, "463": {"name": "Rivière Olomane", "region": "17", "regAdm": "09"}, "464": {"name": "Rivière Osgood", "region": "06", "regAdm": "12"}, "468": {"name": "Rivière Palmer", "region": "06", "regAdm": "12"}, "477": {"name": "Rivière du Pin Rouge", "region": "11", "regAdm": "15"}, "478": {"name": "Ruisseau Pitchpine", "region": "07", "regAdm": "04"}, "480": {"name": "Rivière Pouliot", "region": "06", "regAdm": "12"}, "482": {"name": "Rivière Prévost-Gilbert", "region": "06", "regAdm": "12"}, "489": {"name": "Réservoir Baskatong", "region": "13", "regAdm": "07"}, "490": {"name": "Réservoir Kiamika", "region": "11", "regAdm": "15"}, "495": {"name": "Rivière Saint-Augustin", "region": "17", "regAdm": "09"}, "151": {"name": "Rivière aux Chiens 05", "region": "04", "regAdm": "03"}, "492": {"name": "Rivière Samaqua", "region": "15", "regAdm": "02"}, "491": {"name": "Rivière Sauvage 05", "region": "10", "regAdm": "14"}, "486": {"name": "Lac des Sept Frères", "region": "11", "regAdm": "15"}, "485": {"name": "Rivière Tamarac", "region": "07", "regAdm": "04"}, "484": {"name": "Rivière Témiscamie Est", "region": "18", "regAdm": "10"}, "481": {"name": "Rivière Trois Saumons", "region": "06", "regAdm": "12"}, "479": {"name": "Rivière Victoria", "region": "08", "regAdm": "05"}, "493": {"name": "Rivière Wabano Ouest", "region": "07", "regAdm": "04"}, "494": {"name": "Rivière Wapus", "region": "13", "regAdm": "07"}, "467": {"name": "Rivière Yamachiche", "region": "07", "regAdm": "04"}, "6": {"name": "Rivière Ontaritzi", "region": "04", "regAdm": "03"}, "9": {"name": "Bras du Nord-Ouest", "region": "05", "regAdm": "03"}, "169": {"name": "Rivière Chicoutimi", "region": "15", "regAdm": "02"}, "21": {"name": "Ruisseau (Castelbrook) Castle", "region": "08", "regAdm": "05"}, "356": {"name": "Ruisseau (Key ou Keybrook) Kee", "region": "08", "regAdm": "05"}, "357": {"name": "Rivière Mauvaise", "region": "04", "regAdm": "03"}, "359": {"name": "Rivière Sault à la Puce", "region": "04", "regAdm": "03"}, "378": {"name": "Rivière Talayarde", "region": "04", "regAdm": "03"}, "379": {"name": "Rivière de la Tête Blanche", "region": "15", "regAdm": "02"}, "394": {"name": "Rivière aux Araignées", "region": "08", "regAdm": "05"}, "395": {"name": "Rivière aux Mulets", "region": "11", "regAdm": "15"}, "397": {"name": "Rivière Bayonne", "region": "10", "regAdm": "14"}, "400": {"name": "Rivière Bellefeuille", "region": "11", "regAdm": "15"}, "401": {"name": "Rivière Berry", "region": "14", "regAdm": "08"}, "402": {"name": "Rivière Boucher 07", "region": "16", "regAdm": "09"}, "405": {"name": "Rivière Bras d'Apic", "region": "06", "regAdm": "12"}, "411": {"name": "Rivière Caopacho", "region": "17", "regAdm": "09"}, "412": {"name": "Rivière Cassian", "region": "04", "regAdm": "03"}, "414": {"name": "Rivière Chézine", "region": "04", "regAdm": "03"}, "415": {"name": "Rivière Chicot", "region": "10", "regAdm": "14"}, "423": {"name": "Ruisseau des Passes", "region": "04", "regAdm": "03"}, "426": {"name": "Rivière Dominique", "region": "17", "regAdm": "09"}, "434": {"name": "Branche à Gauche (Gauthier)", "region": "10", "regAdm": "14"}, "438": {"name": "Rivière Hinchinbrooke", "region": "09", "regAdm": "16"}, "439": {"name": "Rivière des Huit Chutes", "region": "15", "regAdm": "02"}, "440": {"name": "Rivière à l' (Saint-Adolphe) Île", "region": "04", "regAdm": "03"}, "441": {"name": "Rivière des Îles", "region": "07", "regAdm": "04"}, "442": {"name": "Ruisseau de Jackson", "region": "08", "regAdm": "05"}, "449": {"name": "Décharge du lac Bouchette", "region": "11", "regAdm": "15"}, "452": {"name": "Rivière Launière", "region": "04", "regAdm": "03"}, "454": {"name": "Rivière Marsoui", "region": "02", "regAdm": "11"}, "455": {"name": "Rivière Mastigouche Nord", "region": "10", "regAdm": "14"}, "458": {"name": "Ruisseau Mitchel", "region": "09", "regAdm": "16"}, "459": {"name": "Rivière à Moïse", "region": "04", "regAdm": "03"}, "462": {"name": "Ruisseau North Branch", "region": "08", "regAdm": "05"}, "466": {"name": "Rivière aux Outardes Est", "region": "09", "regAdm": "16"}, "469": {"name": "Rivière Palmer Est", "region": "06", "regAdm": "12"}, "470": {"name": "Rivière Pelletier", "region": "15", "regAdm": "02"}, "473": {"name": "Petite rivière (Wayagamac Creek) Bostonnais", "region": "07", "regAdm": "04"}, "474": {"name": "Petite rivière de la Trinité", "region": "16", "regAdm": "09"}, "475": {"name": "Petite rivière Vermillon", "region": "07", "regAdm": "04"}, "471": {"name": "Rivière du Port au Saumon", "region": "05", "regAdm": "03"}, "465": {"name": "Rivière Pozer", "region": "06", "regAdm": "12"}, "461": {"name": "Rivière Quévillon", "region": "18", "regAdm": "10"}, "457": {"name": "Rivière Quyon", "region": "13", "regAdm": "07"}, "446": {"name": "Rivière des Rapides", "region": "17", "regAdm": "09"}, "430": {"name": "Rivière Rigaud Est", "region": "09", "regAdm": "16"}, "403": {"name": "Rivière Rigaud", "region": "09", "regAdm": "16"}, "399": {"name": "Ruisseau Ruiter", "region": "08", "regAdm": "05"}, "358": {"name": "Rivière Sainte-Anne Nord-Est 02", "region": "02", "regAdm": "11"}, "239": {"name": "Rivière Saint-Esprit", "region": "10", "regAdm": "14"}, "8": {"name": "Rivière Sant Bout", "region": "07", "regAdm": "04"}, "72": {"name": "Ruisseau aux Saumons", "region": "02", "regAdm": "11"}, "7": {"name": "Ruisseau Terrebonne", "region": "06", "regAdm": "12"}, "488": {"name": "Rivière des Trois-Pistoles", "region": "03", "regAdm": "01"}, "487": {"name": "Ruisseau Willow", "region": "08", "regAdm": "05"}, "483": {"name": "Rivière Winneway", "region": "14", "regAdm": "08"}, "443": {"name": "Rivière Yamaska Nord", "region": "08", "regAdm": "05"}, "429": {"name": "Rivière Yamaska Sud-Est", "region": "08", "regAdm": "05"}, "472": {"name": "Rivière Perugia", "region": "17", "regAdm": "09"}, "407": {"name": "Rivière (Bras-Louis) Saint-Louis", "region": "15", "regAdm": "02"}, "476": {"name": "Rivière aux Castors Noirs", "region": "07", "regAdm": "04"}, "526": {"name": "Rivière aux Outardes 07", "region": "16", "regAdm": "09"}, "527": {"name": "Rivière Puyjalon", "region": "17", "regAdm": "09"}, "496": {"name": "Rivière aux Saumons 06", "region": "15", "regAdm": "02"}, "497": {"name": "Rivière Blanche (Gatineau)", "region": "13", "regAdm": "07"}, "498": {"name": "Rivière Cachée 05", "region": "04", "regAdm": "03"}, "499": {"name": "Rivière Blanche 05", "region": "04", "regAdm": "03"}, "500": {"name": "Rivière Noire 05 (Saint-Siméon)", "region": "05", "regAdm": "03"}, "501": {"name": "Rivière Rouge (Albion) 03", "region": "08", "regAdm": "05"}, "502": {"name": "Rivière Saint-Charles 03 (Valleyfield)", "region": "09", "regAdm": "16"}, "503": {"name": "Rivière Sainte-Anne Ouest", "region": "04", "regAdm": "03"}, "504": {"name": "Lac Saint-Jean", "region": "15", "regAdm": "02"}, "505": {"name": "Lac (Baie Missisquoi) Champlain", "region": "09", "regAdm": "16"}, "506": {"name": "Lac Memphrémagog", "region": "08", "regAdm": "05"}, "507": {"name": "Lac Brome", "region": "08", "regAdm": "05"}, "508": {"name": "Lac Mégantic", "region": "08", "regAdm": "05"}, "509": {"name": "Fleuve Saint-Laurent (Tronçon fluvial)", "region": "09", "regAdm": "16"}, "510": {"name": "Fleuve Saint-Laurent (Estuaire fluvial)", "region": "04", "regAdm": "03"}, "511": {"name": "Fleuve Saint-Laurent (Estuaire moyen)", "region": "03", "regAdm": "01"}, "512": {"name": "Fleuve Saint-Laurent (Estuaire maritime)", "region": "03", "regAdm": "09"}, "513": {"name": "Golfe Saint-Laurent", "region": "02", "regAdm": "11"}, "514": {"name": "Baie des Chaleurs", "region": "02", "regAdm": "11"}, "515": {"name": "Rivière Manicouagan", "region": "16", "regAdm": "09"}, "516": {"name": "Lac Témiscouata", "region": "03", "regAdm": "01"}, "517": {"name": "Rivière Saint-François 01", "region": "03", "regAdm": "01"}, "519": {"name": "Rivière Delisle", "region": "09", "regAdm": "16"}, "520": {"name": "Rivière Dufresne", "region": "10", "regAdm": "14"}, "518": {"name": "Rivière à l' Ours (Bear River)", "region": "14", "regAdm": "08"}, "521": {"name": "Rivière Maganasipi", "region": "14", "regAdm": "08"}, "522": {"name": "Rivière Murphy", "region": "02", "regAdm": "11"}, "523": {"name": "Ruisseau Penniseault", "region": "13", "regAdm": "07"}, "524": {"name": "Rivière Schyan", "region": "13", "regAdm": "07"}, "525": {"name": "Ruisseau Demers (Waka's Creek)", "region": "20", "regAdm": "17"}, "389": {"name": "Rivière Aguanish Nord", "region": "17", "regAdm": "09"}, "390": {"name": "Rivière Aguanish Nord-Ouest", "region": "17", "regAdm": "09"}, "529": {"name": "Du Moulin", "region": "03", "regAdm": "12"}, "528": {"name": "Alick", "region": "03", "regAdm": "12"}, "530": {"name": "Rivière à la Tortue", "region": "09", "regAdm": "16"}, "531": {"name": "Rivière Shipastouk", "region": "18", "regAdm": "10"}, "532": {"name": "Rivière de la Petite Fourche", "region": "02", "regAdm": "11"}, "533": {"name": "Rivière Sainte-Anne 02 (Bas-Saint-Laurent)", "region": "03", "regAdm": "01"}, "534": {"name": "Rivière Tarigou", "region": "02", "regAdm": "01"}, "535": {"name": "Rivière du Portage", "region": "02", "regAdm": "11"}, "536": {"name": "Le Gros Bras", "region": "05", "regAdm": "03"}, "537": {"name": "Rivière Prudent", "region": "15", "regAdm": "02"}, "538": {"name": "Rivière à la Catin", "region": "15", "regAdm": "02"}, "539": {"name": "Rivière Cami", "region": "15", "regAdm": "02"}, "540": {"name": "Rivière à l' Épaule", "region": "04", "regAdm": "03"}, "541": {"name": "Rivière Onatchiway", "region": "15", "regAdm": "02"}, "542": {"name": "Ruisseau Ulric", "region": "16", "regAdm": "09"}, "543": {"name": "Rivière du Milieu 05", "region": "04", "regAdm": "03"}, "544": {"name": "Rivière Tortue", "region": "17", "regAdm": "09"}, "545": {"name": "Rivière des Mares", "region": "05", "regAdm": "03"}, "546": {"name": "Rivière du Gouffre Sud-Ouest", "region": "05", "regAdm": "03"}, "547": {"name": "Bras du Nord-Est", "region": "03", "regAdm": "12"}, "548": {"name": "Rivière des Martres", "region": "05", "regAdm": "03"}, "550": {"name": "Rivière De Pontois", "region": "18", "regAdm": "10"}, "551": {"name": "Perronel", "region": "21", "regAdm": "10"}, "552": {"name": "Barvillier", "region": "21", "regAdm": "10"}, "387": {"name": "Rivière Octave", "region": "18", "regAdm": "08"}, "553": {"name": "Rivière Kamouraska", "region": "03", "regAdm": "01"}, "554": {"name": "Lac / Rivière Abitibi", "region": "14", "regAdm": "08"}, "555": {"name": "Lac Wallace", "region": "08", "regAdm": "05"}, "556": {"name": "Rivière des Mères", "region": "03", "regAdm": "12"}, "557": {"name": "River (Lac de l'Est) Chimenticook", "region": "03", "regAdm": "01"}, "558": {"name": "Rivière Mistassini 07", "region": "16", "regAdm": "09"}, "559": {"name": "Rivière Polemond", "region": "21", "regAdm": "10"}, "560": {"name": "Rivière du Portage", "region": "15", "regAdm": "02"}, "561": {"name": "Baie James / Hudson / Ungava", "region": "18", "regAdm": "10"}, "562": {"name": "Rivière du Port aux Quilles", "region": "05", "regAdm": "03"}, "563": {"name": "Rivière aux Canards", "region": "05", "regAdm": "03"}, "564": {"name": "Rivière du Cran", "region": "15", "regAdm": "02"}, "565": {"name": "Rivière à la Truite", "region": "09", "regAdm": "16"}, "566": {"name": "Rivière aux Iroquois", "region": "15", "regAdm": "02"}, "567": {"name": "Rivière à l' Ours", "region": "15", "regAdm": "02"}, "568": {"name": "Rivière Fildegrand", "region": "13", "regAdm": "07"}, "569": {"name": "Rivière aux Saumons", "region": "09", "regAdm": "16"}, "999": {"name": "Non classé", "region": "18", "regAdm": "10"}, "570": {"name": "Rivière Lavigne", "region": "10", "regAdm": "14"}, "571": {"name": "Rivière Dufault", "region": "14", "regAdm": "08"}, "572": {"name": "Rivière à la Chaloupe", "region": null, "regAdm": "09"}, "573": {"name": "Rivière la Pêche", "region": "13", "regAdm": "07"}};
+const REGION_NAMES = {"01": "Îles-de-la-Madeleine", "02": "Gaspésie", "03": "Bas-Saint-Laurent", "04": "Région de Québec", "05": "Charlevoix", "06": "Chaudière-Appalaches", "07": "Mauricie", "08": "Cantons-de-l'Est", "09": "Montérégie", "10": "Lanaudière", "11": "Laurentides", "12": "Montréal", "13": "Outaouais", "14": "Abitibi-Témiscamingue", "15": "Saguenay–Lac-Saint-Jean", "16": "Manicouagan", "17": "Duplessis", "18": "Baie-James et Eeyou Istchee", "19": "Laval", "20": "Centre-du-Québec", "21": "Nunavik"};  // région touristique (affichée dans l'appli)
+const REGION_ADM_NAMES = {"01": "Bas-Saint-Laurent", "02": "Saguenay–Lac-Saint-Jean", "03": "Capitale-Nationale", "04": "Mauricie", "05": "Estrie", "06": "Montréal", "07": "Outaouais", "08": "Abitibi-Témiscamingue", "09": "Côte-Nord", "10": "Nord-du-Québec", "11": "Gaspésie–Îles-de-la-Madeleine", "12": "Chaudière-Appalaches", "13": "Laval", "14": "Lanaudière", "15": "Laurentides", "16": "Montérégie", "17": "Centre-du-Québec"};  // région administrative (sert à valider le nom de fichier)
+
+let loadedCatalog = { regions: [], geo: {} }; // catalogue chargé (optionnel)
+let externalMetadata = {}; // nom de fichier -> {name, km, niveau} lu par Claude
+let routes = []; // { fileName, id, region, river, name, km, niveau, geo, pngBlob, previewUrl, status, error }
+let regionOptions = new Set();
+let riverOptions = new Set();
+
+const routesListEl = document.getElementById("routes-list");
+const emptyStateEl = document.getElementById("empty-state");
+const routesCountEl = document.getElementById("routes-count");
+const btnGenerate = document.getElementById("btn-generate");
+const logEl = document.getElementById("log");
+const catalogSummaryEl = document.getElementById("catalog-summary");
+
+function log(msg){
+  logEl.classList.add("show");
+  logEl.textContent += msg + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ------------------------------------------------------------
+   Chargement d'un catalog.json existant
+------------------------------------------------------------ */
+document.getElementById("btn-load-catalog").addEventListener("click", ()=>{
+  document.getElementById("input-catalog").click();
+});
+document.getElementById("input-catalog").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    loadedCatalog = { regions: json.regions || [], geo: json.geo || {} };
+    (json.regions || []).forEach(r=>{
+      regionOptions.add(r.region);
+      (r.rivers||[]).forEach(riv=> riverOptions.add(riv.river));
+    });
+    const nRoutes = (json.regions||[]).reduce((a,r)=> a + r.rivers.reduce((b,riv)=>b+riv.routes.length,0), 0);
+    document.getElementById("catalog-load-status").textContent = `✓ Chargé — ${nRoutes} parcours existants seront conservés`;
+    updateDatalists();
+  } catch(err){
+    document.getElementById("catalog-load-status").textContent = "✗ Fichier invalide";
+    console.error(err);
+  }
+});
+
+/* ------------------------------------------------------------
+   Chargement des métadonnées lues par Claude sur les cartes
+   Format attendu: { "nom-du-fichier.tif": {"name":..., "km":..., "niveau":...}, ... }
+   Le nom de fichier sert de clé — insensible à la casse.
+------------------------------------------------------------ */
+document.getElementById("btn-load-metadata").addEventListener("click", ()=>{
+  document.getElementById("input-metadata").click();
+});
+document.getElementById("input-metadata").addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const json = JSON.parse(text);
+    externalMetadata = {};
+    Object.entries(json).forEach(([fname, meta])=>{
+      externalMetadata[fname.toLowerCase()] = meta;
+    });
+    document.getElementById("metadata-load-status").textContent =
+      `✓ Chargé — ${Object.keys(externalMetadata).length} carte(s) reconnue(s)`;
+  } catch(err){
+    document.getElementById("metadata-load-status").textContent = "✗ Fichier invalide";
+    console.error(err);
+  }
+});
+
+/* ------------------------------------------------------------
+   Datalist pour région/rivière (autocomplétion)
+------------------------------------------------------------ */
+function updateDatalists(){
+  let dlRegion = document.getElementById("dl-region");
+  let dlRiver = document.getElementById("dl-river");
+  if (!dlRegion){
+    dlRegion = document.createElement("datalist"); dlRegion.id = "dl-region";
+    document.body.appendChild(dlRegion);
+  }
+  if (!dlRiver){
+    dlRiver = document.createElement("datalist"); dlRiver.id = "dl-river";
+    document.body.appendChild(dlRiver);
+  }
+  dlRegion.innerHTML = [...regionOptions].map(r=>`<option value="${r}">`).join("");
+  dlRiver.innerHTML = [...riverOptions].map(r=>`<option value="${r}">`).join("");
+}
+updateDatalists();
+
+/* ------------------------------------------------------------
+   Drag & drop / sélection de fichiers .tif
+------------------------------------------------------------ */
+const dropzone = document.getElementById("dropzone");
+const inputTif = document.getElementById("input-tif");
+
+dropzone.addEventListener("click", ()=> inputTif.click());
+["dragenter","dragover"].forEach(evt=>{
+  dropzone.addEventListener(evt, (e)=>{ e.preventDefault(); dropzone.classList.add("drag"); });
+});
+["dragleave","drop"].forEach(evt=>{
+  dropzone.addEventListener(evt, (e)=>{ e.preventDefault(); dropzone.classList.remove("drag"); });
+});
+dropzone.addEventListener("drop", (e)=>{
+  handleFiles(e.dataTransfer.files);
+});
+inputTif.addEventListener("change", (e)=>{
+  handleFiles(e.target.files);
+  inputTif.value = "";
+});
+
+function slugify(str){
+  return str.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+}
+
+function cleanNameFromFilename(rawName){
+  let s = rawName;
+  // retire un préfixe du genre "RB-02_191_" ou "RB01-191-"
+  s = s.replace(/^RB-?\d+[_-]\d+[_-]/i, "");
+  // retire un préfixe plus simple du genre "RB-02_"
+  s = s.replace(/^RB-?\d+[_-]/i, "");
+  // retire un suffixe "_VF" / "-VF" / " VF" (version finale)
+  s = s.replace(/[_\-\s]?VF$/i, "");
+  // remplace tirets bas et tirets par des espaces
+  s = s.replace(/[_]+/g, " ").trim();
+  return s || rawName;
+}
+
+/* Reconnaît le format RB-<code région ADMINISTRATIVE, 2 chiffres>_<ID_PLN_EAU,
+   la rivière dans la couche parcours>_<nom>_VF.tif.
+   La région affichée dans l'appli reste la région TOURISTIQUE (catégorie du
+   catalogue), mais la validation du code du nom de fichier se fait contre
+   la région ADMINISTRATIVE de la rivière — c'est elle que CKQ utilise dans
+   la convention de nommage, pas la région touristique. */
+function parseRouteFilename(rawName){
+  const m = rawName.match(/^RB-?(\d{2})[_-](\d+)[_-](.+?)(?:[_-]?VF)?$/i);
+  const result = { region: "", river: "", name: cleanNameFromFilename(rawName), matched: false };
+  if (!m) return result;
+
+  const [, admCode, riverId, restName] = m;
+  const riverInfo = RIVER_LOOKUP[riverId];
+
+  if (riverInfo){
+    result.matched = true;
+    result.region = REGION_NAMES[riverInfo.region] || "";
+    result.river = riverInfo.name || "";
+    result.name = restName.replace(/[_]+/g, " ").trim() || result.name;
+
+    if (riverInfo.regAdm && riverInfo.regAdm !== admCode){
+      const fileAdmName = REGION_ADM_NAMES[admCode] || admCode;
+      const tableAdmName = REGION_ADM_NAMES[riverInfo.regAdm] || riverInfo.regAdm;
+      result.mismatch = `code région administrative du fichier (${admCode} — ${fileAdmName}) ≠ région administrative réelle de la rivière (${riverInfo.regAdm} — ${tableAdmName}) — vérifie ce fichier`;
+    }
+  }
+  return result;
+}
+
+async function handleFiles(fileList){
+  const files = [...fileList].filter(f => /\.tiff?$/i.test(f.name));
+  if (!files.length){
+    log("Aucun fichier .tif/.tiff détecté dans la sélection.");
+    return;
+  }
+  // reprend la région/rivière de la dernière carte ajoutée, en secours
+  // seulement si le nom de fichier ne suit pas la convention RB-XX_YYY_
+  const last = routes[routes.length - 1];
+  const carryRegion = last ? last.region : "";
+  const carryRiver = last ? last.river : "";
+
+  for (const file of files){
+    const rawName = file.name.replace(/\.tiff?$/i,"");
+    const parsed = parseRouteFilename(rawName);
+    const meta = externalMetadata[file.name.toLowerCase()] || externalMetadata[rawName.toLowerCase()];
+
+    const route = {
+      fileName: file.name,
+      id: slugify((meta && meta.name) || parsed.name) || slugify(rawName),
+      region: parsed.matched ? parsed.region : carryRegion,
+      river: parsed.matched ? parsed.river : carryRiver,
+      name: (meta && meta.name) || parsed.name,
+      km: (meta && meta.km != null) ? meta.km : "",
+      niveau: (meta && meta.niveau) || "Intermédiaire",
+      duree: (meta && meta.duree) || "",
+      geo: null, pngBlob: null, previewUrl: null,
+      status: "pending", error: null
+    };
+    routes.push(route);
+    renderRoutes();
+    if (parsed.matched){
+      log(`ℹ ${file.name} → région/rivière reconnues automatiquement (${route.region} / ${route.river})${parsed.mismatch ? " — " + parsed.mismatch : ""}`);
+    }
+    if (meta){
+      log(`ℹ ${file.name} → nom/distance/niveau appliqués depuis le fichier de métadonnées`);
+    }
+    processFile(file, route);
+  }
+}
+
+/* ------------------------------------------------------------
+   Traitement d'un GeoTIFF : lecture, projection, rendu PNG
+------------------------------------------------------------ */
+const BRAND_RGB = [0, 37, 105];
+const MIST_RGB = [242, 248, 252];
+const MAX_SIDE = 1600;
+
+async function resolveProj4(epsgCode){
+  if (!epsgCode) return null;
+  if (proj4.defs(`EPSG:${epsgCode}`)) return proj4.defs(`EPSG:${epsgCode}`);
+  try {
+    const resp = await fetch(`https://epsg.io/${epsgCode}.proj4`);
+    if (!resp.ok) throw new Error("epsg.io a refusé la requête");
+    const proj4str = (await resp.text()).trim();
+    proj4.defs(`EPSG:${epsgCode}`, proj4str);
+    return proj4str;
+  } catch(err){
+    throw new Error(`Impossible de résoudre l'EPSG:${epsgCode} automatiquement (${err.message}). Vérifie ta connexion.`);
+  }
+}
+
+async function processFile(file, route){
+  try {
+    log(`→ Lecture de ${file.name}…`);
+    const buf = await file.arrayBuffer();
+    const tiff = await GeoTIFF.fromArrayBuffer(buf);
+    const image = await tiff.getImage();
+    const w = image.getWidth();
+    const h = image.getHeight();
+
+    const fd = image.fileDirectory;
+    let a,b,c,d,e,f;
+    if (fd.ModelTransformation){
+      const m = fd.ModelTransformation;
+      a=m[0]; b=m[1]; c=m[3];
+      d=m[4]; e=m[5]; f=m[7];
+    } else if (fd.ModelPixelScale && fd.ModelTiepoint){
+      const [sx, sy] = fd.ModelPixelScale;
+      const [i0, j0, , x0, y0] = fd.ModelTiepoint;
+      a = sx; b = 0; c = x0 - sx * i0;
+      d = 0; e = -sy; f = y0 + sy * j0;
+    } else {
+      throw new Error("Ce GeoTIFF n'a pas de balise de géoréférencement reconnue (ModelTransformation ou ModelPixelScale/Tiepoint).");
+    }
+
+    const geoKeys = image.getGeoKeys ? image.getGeoKeys() : {};
+    const epsg = geoKeys.ProjectedCSTypeGeoKey || geoKeys.GeographicTypeGeoKey;
+    if (!epsg) throw new Error("Impossible de trouver le code EPSG dans les GeoKeys du fichier.");
+    const proj4str = await resolveProj4(epsg);
+
+    // Rendu du raster sur canvas
+    const rasters = await image.readRasters({ interleave: true });
+    const nBands = image.getSamplesPerPixel();
+
+    const srcCanvas = document.createElement("canvas");
+    srcCanvas.width = w; srcCanvas.height = h;
+    const ctx = srcCanvas.getContext("2d");
+    const imgData = ctx.createImageData(w, h);
+    for (let px = 0; px < w*h; px++){
+      const o = px * nBands, o4 = px * 4;
+      if (nBands >= 3){
+        imgData.data[o4] = rasters[o];
+        imgData.data[o4+1] = rasters[o+1];
+        imgData.data[o4+2] = rasters[o+2];
+        imgData.data[o4+3] = 255;
+      } else {
+        imgData.data[o4] = imgData.data[o4+1] = imgData.data[o4+2] = rasters[o];
+        imgData.data[o4+3] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Redimensionnement web — plus de bandeau de titre : l'image, c'est
+    // juste la carte, le nom du parcours s'affiche déjà dans l'appli.
+    const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+    const newW = Math.max(1, Math.round(w * scale));
+    const newH = Math.max(1, Math.round(h * scale));
+
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = newW;
+    outCanvas.height = newH;
+    const octx = outCanvas.getContext("2d");
+    octx.drawImage(srcCanvas, 0, 0, w, h, 0, 0, newW, newH);
+
+    const pngBlob = await new Promise(res => outCanvas.toBlob(res, "image/png"));
+    route.previewUrl = URL.createObjectURL(pngBlob);
+    route.pngBlob = pngBlob;
+    route.geo = {
+      crs_proj4: proj4str,
+      transform: [a,b,c,d,e,f],
+      orig_width: w,
+      orig_height: h,
+      content_height: newH,
+      header_height: 0,
+      total_width: newW,
+      total_height: newH
+    };
+    route.status = "ok";
+    log(`✓ ${file.name} converti (EPSG:${epsg}, ${w}×${h}px)`);
+  } catch(err){
+    route.status = "err";
+    route.error = err.message;
+    log(`✗ ${file.name} — ${err.message}`);
+  }
+  renderRoutes();
+  updateGenerateButton();
+}
+
+/* ------------------------------------------------------------
+   Rendu de la liste de cartes / formulaire par carte
+------------------------------------------------------------ */
+function renderRoutes(){
+  emptyStateEl.style.display = routes.length ? "none" : "block";
+  routesCountEl.textContent = routes.length
+    ? `${routes.length} fichier(s) — remplis les infos ci-dessous pour chaque carte.`
+    : "Aucune carte ajoutée pour l'instant.";
+
+  routesListEl.innerHTML = routes.map((r, idx) => `
+    <div class="route-card" data-idx="${idx}">
+      <div class="thumb" style="${r.previewUrl ? `background-image:url('${r.previewUrl}')` : ''}">
+        ${r.previewUrl ? '' : (r.status === 'err' ? '✗ erreur' : '…')}
+      </div>
+      <div class="fields">
+        <div class="full">
+          <label>Fichier</label>
+          <div style="font-size:12px; color:var(--ink-soft);">${r.fileName}</div>
+        </div>
+        <div>
+          <label>Identifiant (id)</label>
+          <input data-field="id" value="${r.id}">
+        </div>
+        <div>
+          <label>Niveau</label>
+          <select data-field="niveau">
+            ${["Débutant","Intermédiaire","Avancé","Expédition"].map(n=>
+              `<option ${r.niveau===n?"selected":""}>${n}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label>Région touristique</label>
+          <select data-field="region">
+            <option value="">— choisir —</option>
+            ${Object.values(REGION_NAMES).map(n=>
+              `<option ${r.region===n?"selected":""}>${n}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label>Rivière</label>
+          <input data-field="river" list="dl-river" value="${r.river}" placeholder="ex: Rivière Rouge">
+        </div>
+        <div class="full">
+          <label>Nom du parcours</label>
+          <input data-field="name" value="${r.name}">
+        </div>
+        <div>
+          <label>Longueur (km)</label>
+          <input data-field="km" type="number" step="0.1" value="${r.km}">
+        </div>
+        <div>
+          <label>Durée</label>
+          <input data-field="duree" value="${r.duree || ''}" placeholder="ex: 2h30 à 4h30">
+        </div>
+        <div class="status ${r.status === 'ok' ? 'ok' : r.status === 'err' ? 'err' : 'pending'}">
+          ${r.status === 'ok' ? '✓ Converti' : r.status === 'err' ? '✗ ' + r.error : '… traitement en cours'}
+        </div>
+      </div>
+      <button class="remove" data-remove="${idx}">✕ retirer</button>
+    </div>
+  `).join("");
+
+  routesListEl.querySelectorAll("[data-field]").forEach(inp=>{
+    inp.addEventListener("input", (e)=>{
+      const idx = e.target.closest(".route-card").dataset.idx;
+      const field = e.target.dataset.field;
+      routes[idx][field] = e.target.value;
+      if (field === "region") regionOptions.add(e.target.value);
+      if (field === "river") riverOptions.add(e.target.value);
+      updateDatalists();
+      updateGenerateButton();
+    });
+  });
+  routesListEl.querySelectorAll("[data-remove]").forEach(btn=>{
+    btn.addEventListener("click", (e)=>{
+      routes.splice(e.target.dataset.remove, 1);
+      renderRoutes();
+      updateGenerateButton();
+    });
+  });
+}
+
+function updateGenerateButton(){
+  const readyCount = routes.filter(r => r.status === "ok" && r.region && r.river && r.name).length;
+  btnGenerate.disabled = readyCount === 0;
+  catalogSummaryEl.innerHTML = readyCount
+    ? `<b>${readyCount}</b> carte(s) prête(s) à inclure dans le pack.`
+    : `Remplis au moins Région / Rivière / Nom pour au moins une carte convertie.`;
+}
+
+/* ------------------------------------------------------------
+   Génération du .zip final (images + catalog.json fusionné)
+------------------------------------------------------------ */
+document.getElementById("btn-generate").addEventListener("click", async ()=>{
+  const zip = new JSZip();
+
+  // repartir du catalogue chargé (s'il y en a un)
+  const regionsMap = {}; // region -> river -> [routes]
+  (loadedCatalog.regions || []).forEach(r=>{
+    regionsMap[r.region] = {};
+    (r.rivers||[]).forEach(riv=>{
+      regionsMap[r.region][riv.river] = [...riv.routes];
+    });
+  });
+  const geoAll = { ...(loadedCatalog.geo || {}) };
+
+  let included = 0;
+  for (const r of routes){
+    if (r.status !== "ok" || !r.region || !r.river || !r.name) continue;
+    zip.file(`map-${r.id}.png`, r.pngBlob);
+    geoAll[r.id] = r.geo;
+    regionsMap[r.region] = regionsMap[r.region] || {};
+    regionsMap[r.region][r.river] = regionsMap[r.region][r.river] || [];
+    // remplace si même id existe déjà (mise à jour)
+    regionsMap[r.region][r.river] = regionsMap[r.region][r.river].filter(x => x.id !== r.id);
+    regionsMap[r.region][r.river].push({
+      id: r.id, name: r.name, km: r.km ? parseFloat(r.km) : null, niveau: r.niveau, duree: r.duree || null
+    });
+    included++;
+  }
+
+  const catalogRegions = Object.entries(regionsMap).map(([region, rivers])=>({
+    region,
+    rivers: Object.entries(rivers).map(([river, rts])=>({ river, routes: rts }))
+  }));
+
+  const catalog = { regions: catalogRegions, geo: geoAll };
+  zip.file("catalog.json", JSON.stringify(catalog, null, 2));
+
+  log(`\nGénération du .zip — ${included} nouvelle(s)/mise(s) à jour carte(s), ${Object.keys(geoAll).length} au total.`);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "route-bleue-cartes.zip";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  log("✓ Téléchargement lancé: route-bleue-cartes.zip");
+});
+</script>
+</body>
+</html>
