@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>La route bleue — Cartes hors ligne</title>
+<meta name="theme-color" content="#002569">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F2F8FC;
+    --ink:#0D1E30;
+    --ink-soft:#5A7A93;
+    --teal:#009EC2;
+    --teal-dark:#002569;
+    --brand-2:#003080;
+    --brand-dark:#001847;
+    --accent-2:#5CD4ED;
+    --foam:#E5F4FB;
+    --ripple:#B8DDEF;
+    --sand:#009EC2;
+    --sand-dark:#007A99;
+    --line:#DCEAF3;
+    --card:#FFFFFF;
+    --danger:#C05B38;
+    --success:#2D9E6B;
+    --radius:14px;
+    --font-display:'Montserrat', Arial, sans-serif;
+    --font-body:'Montserrat', Arial, sans-serif;
+    --font-mono:'Montserrat', Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  html,body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{
+    max-width:520px;
+    margin:0 auto;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    padding-bottom:76px;
+  }
+
+  /* topographic backdrop */
+  .topo-bg{
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    opacity:0.5;
+    background:
+      repeating-radial-gradient(circle at 15% 20%, transparent 0 18px, var(--line) 19px 20px, transparent 21px 60px),
+      repeating-radial-gradient(circle at 85% 75%, transparent 0 24px, var(--line) 25px 26px, transparent 27px 70px);
+  }
+
+  header.top{
+    padding:22px 20px 16px;
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+  }
+  header.top .brand-eyebrow{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--teal-dark);
+    opacity:0.75;
+    display:block;
+    margin-bottom:4px;
+  }
+  header.top h1{
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:23px;
+    margin:0;
+    line-height:1.05;
+    letter-spacing:-0.01em;
+    color:var(--ink);
+    text-transform:uppercase;
+  }
+  header.top h1 em{
+    font-style:normal;
+    color:var(--teal-dark);
+  }
+  #install-btn{
+    display:none;
+    align-items:center;
+    gap:6px;
+    background:#fff;
+    color:var(--teal-dark);
+    border:1.5px solid var(--teal-dark);
+    border-radius:999px;
+    padding:9px 14px;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:11.5px;
+    letter-spacing:0.03em;
+    white-space:nowrap;
+    cursor:pointer;
+  }
+  #install-btn:active{ transform:translateY(1px); }
+
+  .status-strip{
+    margin:0 20px 18px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex:none;}
+  .dot.off{background:var(--danger);}
+
+  main{ flex:1; padding:0 20px; }
+  section.screen{ display:none; }
+  section.screen.active{ display:block; }
+
+  /* Catalogue */
+  .region{
+    margin-bottom:14px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background:var(--card);
+    overflow:hidden;
+  }
+  .region-head{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:16px;
+    background:linear-gradient(135deg, var(--teal-dark) 0%, var(--brand-2) 100%);
+    border:none;
+    cursor:pointer;
+    text-align:left;
+    font-family:var(--font-display);
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:#fff;
+  }
+  .region-head .count{
+    font-family:var(--font-body);
+    font-size:10.5px;
+    color:#fff;
+    opacity:0.75;
+    font-weight:500;
+    text-transform:none;
+    letter-spacing:0;
+  }
+  .region-head .chevron{
+    transition:transform .2s ease;
+    color:#fff;
+    margin-left:10px;
+  }
+  .region.open .chevron{ transform:rotate(90deg); }
+  .region-body{
+    display:none;
+    padding:0 16px 14px;
+  }
+  .region.open .region-body{ display:block; }
+
+  .river{ margin-top:8px; }
+  .river-name{
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--teal-dark);
+    opacity:0.85;
+    margin:14px 0 8px;
+  }
+
+  .route-card{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:#fff;
+    margin-bottom:8px;
+  }
+  .route-thumb{
+    width:44px;height:44px;border-radius:8px;
+    background:var(--teal-dark);
+    flex:none;
+    background-size:cover;
+    background-position:center;
+  }
+  .route-info{ flex:1; min-width:0; }
+  .route-info .name{
+    font-weight:600;
+    font-size:14px;
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .route-info .meta{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-top:2px;
+  }
+  .dl-btn{
+    flex:none;
+    border:1.5px solid var(--teal-dark);
+    background:transparent;
+    color:var(--teal-dark);
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:11.5px;
+    border-radius:999px;
+    padding:7px 12px;
+    cursor:pointer;
+  }
+  .dl-btn.done{
+    background:var(--teal);
+    border-color:var(--teal);
+    color:#fff;
+  }
+  .dl-btn.loading{ opacity:0.6; }
+
+  .search-bar{ margin-bottom:10px; }
+  .search-bar input{
+    width:100%;
+    padding:11px 14px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#fff;
+    font-family:var(--font-body);
+    font-size:13.5px;
+    color:var(--ink);
+  }
+  .search-bar input::placeholder{ color:var(--ink-soft); }
+  .filter-row{
+    display:flex;
+    gap:7px;
+    margin-bottom:8px;
+  }
+  .filter-row select{
+    flex:1;
+    min-width:0;
+    padding:9px 8px;
+    border-radius:9px;
+    border:1px solid var(--line);
+    background:#fff;
+    font-family:var(--font-body);
+    font-size:11.5px;
+    color:var(--ink);
+  }
+  .filter-summary{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-bottom:12px;
+    min-height:16px;
+  }
+  .filter-summary button{
+    background:none;
+    border:none;
+    color:var(--teal-dark);
+    font-weight:700;
+    font-size:11.5px;
+    cursor:pointer;
+    padding:0;
+    margin-left:6px;
+  }
+
+  .sub-text{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin:-8px 0 14px;
+  }
+  .open-btn{
+    flex:none;
+    border:none;
+    background:var(--teal-dark);
+    color:#fff;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:11.5px;
+    border-radius:999px;
+    padding:8px 14px;
+    cursor:pointer;
+  }
+  .delete-btn{
+    flex:none;
+    border:none;
+    background:transparent;
+    color:var(--danger);
+    font-size:16px;
+    padding:6px;
+    cursor:pointer;
+    line-height:1;
+  }
+  .dossier-empty{
+    text-align:center;
+    padding:50px 24px;
+    color:var(--ink-soft);
+    font-size:13.5px;
+    line-height:1.6;
+  }
+
+  /* Carte screen */
+
+  .map-frame{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    overflow:hidden;
+    background:#0A1826;
+    position:relative;
+    height:340px;
+    touch-action:none;
+  }
+  .map-frame.fullscreen{
+    position:fixed;
+    inset:0;
+    z-index:300;
+    height:100vh;
+    height:100dvh;
+    border-radius:0;
+    border:none;
+  }
+  .map-transform-layer{
+    position:absolute;
+    top:0; left:0;
+    transform-origin:0 0;
+    will-change:transform;
+  }
+  .map-transform-layer img{ display:block; pointer-events:none; user-select:none; }
+  .map-frame .empty{
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:8px;
+    padding:30px;
+    text-align:center;
+    color:#fff;
+    opacity:0.8;
+    font-size:13px;
+  }
+  .gps-dot{
+    position:absolute;
+    width:16px;height:16px;
+    border-radius:50%;
+    background:var(--accent-2);
+    border:3px solid var(--teal-dark);
+    transform:translate(-50%,-50%);
+    box-shadow:0 0 0 6px rgba(92,212,237,0.35);
+    transition:left .5s linear, top .5s linear;
+  }
+
+  /* Contrôles flottants type Avenza */
+  .map-controls{
+    position:absolute;
+    right:10px; bottom:10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    z-index:5;
+  }
+  .map-controls button{
+    width:42px; height:42px;
+    border-radius:10px;
+    border:none;
+    background:rgba(13,30,48,0.82);
+    color:#fff;
+    font-size:18px;
+    font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    backdrop-filter:blur(3px);
+  }
+  .map-controls button svg{ width:20px; height:20px; }
+  .map-controls button:active{ transform:scale(0.94); }
+  .map-controls button.active{ background:var(--accent); }
+  .map-controls .location-btn{ color:var(--accent-2); }
+  .map-controls .location-btn.active{ background:var(--success); color:#fff; }
+
+  .map-coords-bar{
+    position:absolute;
+    left:50%; bottom:10px;
+    transform:translateX(-50%);
+    background:rgba(13,30,48,0.82);
+    color:#fff;
+    font-family:var(--font-mono);
+    font-size:11px;
+    padding:6px 14px;
+    border-radius:999px;
+    white-space:nowrap;
+    z-index:5;
+    max-width:90%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .map-top-bar{
+    position:absolute;
+    top:10px; left:10px; right:10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    z-index:5;
+    pointer-events:none;
+  }
+  .map-top-bar > *{ pointer-events:auto; }
+  .map-exit-btn{
+    width:38px; height:38px;
+    border-radius:10px;
+    border:none;
+    background:rgba(13,30,48,0.82);
+    color:#fff;
+    font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .map-badge-floating{
+    background:rgba(0,158,194,0.92);
+    color:#fff;
+    font-size:10.5px;
+    font-weight:700;
+    padding:6px 11px;
+    border-radius:999px;
+    letter-spacing:0.02em;
+  }
+  .map-fs-toggle{
+    background:#fff;
+    border:1.5px solid var(--teal-dark);
+    color:var(--teal-dark);
+    font-weight:700;
+    font-size:11.5px;
+    padding:7px 13px;
+    border-radius:999px;
+    cursor:pointer;
+    display:flex; align-items:center; gap:5px;
+  }
+
+  body.map-fullscreen-active header.top,
+  body.map-fullscreen-active .status-strip,
+  body.map-fullscreen-active nav.bottom,
+  body.map-fullscreen-active .screen-title{
+    display:none !important;
+  }
+  body.map-fullscreen-active main{ padding:0; }
+  body.map-fullscreen-active #app{ padding-bottom:0; }
+
+  .coords{
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-top:10px;
+    text-align:center;
+  }
+  .gps-btn{
+    width:100%;
+    margin-top:12px;
+    padding:13px;
+    border-radius:12px;
+    border:none;
+    background:var(--teal-dark);
+    color:#fff;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .gps-btn[disabled]{ opacity:0.45; cursor:not-allowed; }
+
+  /* Communauté */
+  .comment{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:10px;
+  }
+  .comment .who{
+    font-weight:600;
+    font-size:13px;
+  }
+  .comment .route-tag{
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    color:var(--teal-dark);
+    background:rgba(63,166,160,0.14);
+    padding:2px 7px;
+    border-radius:6px;
+    margin-left:6px;
+  }
+  .comment p{
+    margin:6px 0 0;
+    font-size:13.5px;
+    color:var(--ink-soft);
+    line-height:1.45;
+  }
+  .comment-form{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+    margin-bottom:16px;
+  }
+  .comment-form textarea{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:9px 10px;
+    font-family:var(--font-body);
+    font-size:13.5px;
+    resize:vertical;
+    min-height:56px;
+  }
+  .comment-form select{
+    width:100%;
+    margin-bottom:8px;
+    padding:8px 9px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    font-family:var(--font-body);
+    font-size:13px;
+    background:#fff;
+  }
+  .comment-form button{
+    margin-top:8px;
+    background:var(--teal-dark);
+    border:none;
+    color:#fff;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:12px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:10px 18px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+
+  h2.screen-title{
+    font-family:var(--font-display);
+    font-size:20px;
+    font-weight:600;
+    margin:6px 0 14px;
+  }
+
+  /* Accueil / hero */
+  #screen-accueil{
+    margin:0 -20px;
+    padding:0;
+  }
+  .hero{
+    background:var(--mist);
+    padding:36px 24px 30px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    color:var(--ink);
+  }
+  .hero-logo{
+    width:64px; height:64px;
+    background:#fff;
+    border:1px solid var(--ripple);
+    border-radius:18px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:18px;
+  }
+  .hero-logo img{ width:38px; height:38px; }
+  .hero-title{
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:23px;
+    line-height:1.3;
+    color:var(--teal-dark);
+    margin:0 0 12px;
+    max-width:320px;
+  }
+  .hero-title em{ font-style:normal; color:var(--teal); }
+  .hero-tagline{
+    font-size:14px;
+    line-height:1.6;
+    color:var(--ink-soft);
+    max-width:320px;
+    margin:0 0 24px;
+  }
+  .hero-cta{
+    background:var(--teal-dark);
+    color:#fff;
+    border:none;
+    font-family:var(--font-body);
+    font-weight:700;
+    font-size:14px;
+    padding:14px 28px;
+    border-radius:999px;
+    cursor:pointer;
+  }
+  .hero-cta:active{ transform:translateY(1px); }
+  .hero-stats{
+    margin-top:22px;
+    display:flex;
+    gap:22px;
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .hero-stats b{
+    display:block;
+    font-family:var(--font-display);
+    font-size:19px;
+    font-weight:800;
+    color:var(--teal-dark);
+  }
+
+
+  .hero-source-link{
+    display:block;
+    text-align:center;
+    padding:20px 20px 30px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+  }
+  .hero-source-link a{
+    color:var(--teal-dark);
+    font-weight:700;
+    text-decoration:none;
+  }
+  .hero-source-link a:active{ opacity:0.7; }
+  .hero-footer-links{
+    margin-top:12px;
+  }
+  .hero-footer-links button{
+    background:none;
+    border:none;
+    color:var(--ink-soft);
+    font-size:11.5px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+
+  .howto{
+    background:#fff;
+    border-top:1px solid var(--ripple);
+    border-bottom:1px solid var(--ripple);
+  }
+  .howto-toggle{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:16px;
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-family:var(--font-display);
+    font-size:13px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--ink-soft);
+  }
+  .howto-toggle .chevron{
+    transition:transform .2s ease;
+    color:var(--teal-dark);
+  }
+  .howto.open .howto-toggle .chevron{ transform:rotate(90deg); }
+  .howto-body{
+    display:none;
+    padding:4px 24px 22px;
+  }
+  .howto.open .howto-body{ display:block; }
+  .howto-step{
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    margin-bottom:18px;
+  }
+  .howto-step:last-child{ margin-bottom:0; }
+  .howto-num{
+    flex:none;
+    width:26px; height:26px;
+    border-radius:50%;
+    background:var(--teal-dark);
+    color:#fff;
+    font-family:var(--font-display);
+    font-weight:800;
+    font-size:12.5px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .howto-step b{
+    display:block;
+    font-size:13.5px;
+    color:var(--ink);
+    margin-bottom:2px;
+  }
+  .howto-step span{
+    display:block;
+    font-size:12px;
+    color:var(--ink-soft);
+    line-height:1.5;
+  }
+
+  /* Modale (conditions d'utilisation, etc.) */
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(13,30,48,0.55);
+    z-index:500;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal-sheet{
+    background:#fff;
+    width:100%;
+    max-width:520px;
+    max-height:82vh;
+    overflow-y:auto;
+    border-radius:18px 18px 0 0;
+    padding:22px 22px 34px;
+  }
+  .modal-sheet h2{
+    font-family:var(--font-display);
+    font-size:18px;
+    font-weight:800;
+    color:var(--teal-dark);
+    margin:0 0 4px;
+  }
+  .modal-sheet .modal-close{
+    float:right;
+    background:none;
+    border:none;
+    font-size:18px;
+    color:var(--ink-soft);
+    cursor:pointer;
+    padding:4px;
+  }
+  .modal-sheet h4{
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--ink);
+    margin:16px 0 4px;
+  }
+  .modal-sheet p, .modal-sheet li{
+    font-size:12.5px;
+    line-height:1.6;
+    color:var(--ink-soft);
+    margin:0 0 6px;
+  }
+  .modal-sheet ul{ padding-left:18px; margin:6px 0; }
+
+  /* Bottom nav */
+  nav.bottom{
+    position:fixed;
+    bottom:0; left:50%;
+    transform:translateX(-50%);
+    width:100%;
+    max-width:520px;
+    background:var(--card);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  nav.bottom button{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+    background:none;
+    border:none;
+    font-family:var(--font-body);
+    font-size:11px;
+    font-weight:600;
+    color:var(--ink-soft);
+    padding:6px 4px;
+    cursor:pointer;
+  }
+  nav.bottom button.active{ color:var(--teal-dark); }
+  nav.bottom button svg{ width:20px; height:20px; }
+
+  .toast{
+    position:fixed;
+    bottom:82px; left:50%;
+    transform:translateX(-50%) translateY(10px);
+    background:var(--teal-dark);
+    color:#fff;
+    font-size:12.5px;
+    padding:9px 16px;
+    border-radius:999px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+    z-index:50;
+    white-space:nowrap;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="topo-bg"></div>
+
+<div id="app">
+  <header class="top">
+    <div style="display:flex; align-items:center; gap:10px; cursor:pointer;" id="home-link">
+      <img src="./logo-header.png" alt="La route bleue" style="width:38px; height:38px; flex:none;">
+      <div>
+        <span class="brand-eyebrow">Prototype PWA</span>
+        <h1>La route <em>bleue</em></h1>
+      </div>
+    </div>
+    <button id="install-btn">⤓ Installer</button>
+  </header>
+
+  <div class="status-strip" id="status-strip">
+    <span class="dot" id="net-dot"></span>
+    <span id="net-label">En ligne</span>
+    <span style="opacity:.4">·</span>
+    <span id="dl-count">0 carte téléchargée</span>
+  </div>
+
+  <main>
+
+    <!-- ACCUEIL -->
+    <section class="screen active" id="screen-accueil">
+      <div class="hero">
+        <div class="hero-logo">
+          <img src="./logo-header.png" alt="La route bleue">
+        </div>
+        <h1 class="hero-title">Tes cartes sont prêtes pour <em>pagayer le Québec</em></h1>
+        <p class="hero-tagline">Télécharge les parcours de La route bleue et consulte-les hors ligne, où que t'ailles.</p>
+        <button class="hero-cta" id="hero-cta">Explorer le catalogue →</button>
+        <div class="hero-stats" id="hero-stats"></div>
+      </div>
+
+      <div class="howto">
+        <button class="howto-toggle" id="howto-toggle">
+          <span>Comment ça fonctionne</span>
+          <span class="chevron">›</span>
+        </button>
+        <div class="howto-body" id="howto-body">
+          <div class="howto-step">
+            <div class="howto-num">1</div>
+            <div><b>Explore le catalogue</b><span>Trouve un parcours par région, rivière ou recherche.</span></div>
+          </div>
+          <div class="howto-step">
+            <div class="howto-num">2</div>
+            <div><b>Télécharge la carte</b><span>Elle s'ajoute à ton dossier et reste sur ton téléphone.</span></div>
+          </div>
+          <div class="howto-step">
+            <div class="howto-num">3</div>
+            <div><b>Consulte-la sur l'eau</b><span>Ouvre-la même sans réseau, avec ta position en temps réel.</span></div>
+          </div>
+          <div class="howto-step">
+            <div class="howto-num">4</div>
+            <div><b>Retrouve-la dans Mon dossier</b><span>Toutes tes cartes téléchargées, prêtes à rouvrir.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-source-link">
+        Cette appli s'appuie sur le travail de<br>
+        <a href="https://laroutebleue.ca/" target="_blank" rel="noopener">laroutebleue.ca ↗</a>
+        <div class="hero-footer-links">
+          <button id="open-terms">Conditions d'utilisation</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATALOGUE -->
+    <section class="screen" id="screen-catalogue">
+      <h2 class="screen-title">Catalogue par région</h2>
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Rechercher un parcours, une rivière…">
+      </div>
+      <div class="filter-row">
+        <select id="filter-region"><option value="">Toutes les régions</option></select>
+        <select id="filter-niveau">
+          <option value="">Tous les niveaux</option>
+          <option>Débutant</option>
+          <option>Intermédiaire</option>
+          <option>Avancé</option>
+          <option>Expédition</option>
+        </select>
+        <select id="filter-duree">
+          <option value="">Durée — toutes</option>
+          <option value="courte">Courte (&lt; 10 km)</option>
+          <option value="moyenne">Moyenne (10–25 km)</option>
+          <option value="longue">Longue (25 km +)</option>
+        </select>
+      </div>
+      <div class="filter-summary" id="filter-summary"></div>
+      <div id="regions"></div>
+    </section>
+
+    <!-- MON DOSSIER -->
+    <section class="screen" id="screen-dossier">
+      <h2 class="screen-title">Mon dossier</h2>
+      <p class="sub-text">Les cartes que t'as téléchargées, prêtes à consulter hors ligne.</p>
+      <div id="dossier-list"></div>
+    </section>
+
+    <!-- CARTE -->
+    <section class="screen" id="screen-carte">
+      <div class="map-frame" id="map-frame">
+        <div class="empty">
+          Télécharge une carte dans le Catalogue,<br>puis sélectionne-la ici pour la consulter hors ligne.
+        </div>
+      </div>
+    </section>
+
+    <!-- COMMUNAUTÉ -->
+    <section class="screen" id="screen-communaute">
+      <h2 class="screen-title">Commentaires des paddleurs</h2>
+      <div class="comment-form">
+        <select id="comment-route"></select>
+        <textarea id="comment-text" placeholder="Niveau d'eau, obstacles, mise à l'eau…"></textarea>
+        <button id="comment-submit">Publier</button>
+      </div>
+      <div id="comments"></div>
+    </section>
+
+  </main>
+
+  <nav class="bottom">
+    <button class="nav-btn active" data-screen="catalogue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>
+      Catalogue
+    </button>
+    <button class="nav-btn" data-screen="dossier">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+      Mon dossier
+    </button>
+    <button class="nav-btn" data-screen="communaute">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 01-8.5 8.4 8.5 8.5 0 01-4-1L3 20l1.1-5.5A8.4 8.4 0 013 11.5 8.38 8.38 0 0111.5 3a8.5 8.5 0 019.5 8.5z"/></svg>
+      Communauté
+    </button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="terms-modal">
+    <div class="modal-sheet">
+      <button class="modal-close" id="close-terms">✕</button>
+      <h2>Conditions d'utilisation</h2>
+      <p>Cette appli est un prototype réalisé pour Canot Kayak Québec, dans le cadre du projet La route bleue.</p>
+
+      <h4>Précision des cartes</h4>
+      <p>Les cartes proviennent de La route bleue et sont fournies à titre indicatif. Les conditions sur l'eau (niveau, courant, obstacles) peuvent changer sans préavis — vérifie toujours les conditions réelles avant et pendant ta sortie.</p>
+
+      <h4>Positionnement GPS</h4>
+      <p>La position affichée dépend du GPS de ton téléphone, dont la précision varie (couverture, météo, environnement). Ne t'y fie pas comme seule source de navigation en situation à risque.</p>
+
+      <h4>Sécurité</h4>
+      <ul>
+        <li>Cette appli ne remplace pas une évaluation de ton niveau, une bonne planification, ni l'équipement de sécurité requis (VFI, moyen de communication, etc.)</li>
+        <li>Consulte les ressources de La route bleue pour bien te préparer avant chaque sortie.</li>
+      </ul>
+
+      <h4>Données</h4>
+      <p>Les cartes téléchargées et les commentaires sont stockés localement sur ton appareil. Rien n'est transmis à un serveur externe dans cette version prototype.</p>
+
+      <h4>Responsabilité</h4>
+      <p>Cette appli est fournie telle quelle, sans garantie. Canot Kayak Québec et les développeurs ne peuvent être tenus responsables des conséquences liées à son utilisation.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+<script>
+/* ---------------------------------------------------------
+   Catalogue : chargé depuis ./catalog.json au démarrage.
+   Ce fichier est généré par le script batch_convert.py (voir
+   /outils dans le dossier du projet) à partir des GeoTIFF de CKQ.
+   Le contenu ci-dessous ne sert que de secours si catalog.json
+   est absent ou n'a pas encore été déployé.
+--------------------------------------------------------- */
+let GEO_DATA = {
+  "lachute-1": {
+    crs_proj4: "+proj=lcc +lat_0=44 +lon_0=-70 +lat_1=50 +lat_2=46 +x_0=800000 +y_0=0 +datum=NAD83 +units=m +no_defs +type=crs",
+    transform: [1.3748180781439525, -0.7937515875031746, 463042.82274510904, -0.7937515875031746, -1.3748180781439525, 198920.7858914051],
+    orig_width: 3400,
+    orig_height: 4400,
+    content_height: 1600,
+    header_height: 0,
+    total_width: 1236,
+    total_height: 1600
+  }
+};
+
+let DATA = [
+  { region:"Laurentides", rivers:[
+    { river:"Rivière du Nord", routes:[
+      { id:"lachute-1", name:"Lachute", km:6, niveau:"Débutant" },
+    ]}
+  ]}
+];
+
+async function loadCatalog(){
+  try {
+    const resp = await fetch("./catalog.json", { cache: "no-store" });
+    if (!resp.ok) throw new Error("catalog.json absent");
+    const cat = await resp.json();
+    if (cat.regions && cat.regions.length){
+      DATA = cat.regions;
+      GEO_DATA = cat.geo || {};
+      console.log(`Catalogue chargé depuis catalog.json (${allRoutes().length} parcours)`);
+    }
+  } catch(err){
+    console.log("catalog.json non trouvé ou invalide — utilisation du catalogue de secours intégré.", err);
+  }
+}
+
+const MAPS_CACHE = "rb-maps-v1";
+let selectedRouteForMap = null;
+let watchId = null;
+let simInterval = null;
+
+/* ---------- Rendu du catalogue ---------- */
+const regionsEl = document.getElementById("regions");
+const commentRouteSelect = document.getElementById("comment-route");
+
+function allRoutes(){
+  const out = [];
+  DATA.forEach(r => r.rivers.forEach(riv => riv.routes.forEach(rt => {
+    out.push({...rt, region:r.region, river:riv.river});
+  })));
+  return out;
+}
+
+function niveauMeta(rt){
+  const parts = [`${rt.km} km`, rt.niveau];
+  if (rt.duree) parts.push(rt.duree);
+  return parts.join(" · ");
+}
+
+async function isDownloaded(routeId){
+  const cache = await caches.open(MAPS_CACHE);
+  const hit = await cache.match(`./maps/${routeId}.png`);
+  return !!hit;
+}
+
+function getActiveFilters(){
+  return {
+    q: (document.getElementById("search-input")?.value || "").trim().toLowerCase(),
+    region: document.getElementById("filter-region")?.value || "",
+    niveau: document.getElementById("filter-niveau")?.value || "",
+    duree: document.getElementById("filter-duree")?.value || ""
+  };
+}
+
+function filtersActive(f){
+  return !!(f.q || f.region || f.niveau || f.duree);
+}
+
+function matchesFilters(rt, f){
+  if (f.region && rt.region !== f.region) return false;
+  if (f.niveau && rt.niveau !== f.niveau) return false;
+  if (f.duree){
+    const km = rt.km || 0;
+    if (f.duree === "courte" && !(km < 10)) return false;
+    if (f.duree === "moyenne" && !(km >= 10 && km <= 25)) return false;
+    if (f.duree === "longue" && !(km > 25)) return false;
+  }
+  if (f.q){
+    const hay = `${rt.name} ${rt.river} ${rt.region}`.toLowerCase();
+    if (!hay.includes(f.q)) return false;
+  }
+  return true;
+}
+
+function populateRegionFilter(){
+  const sel = document.getElementById("filter-region");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = `<option value="">Toutes les régions</option>` +
+    DATA.map(r => `<option ${r.region===current?"selected":""}>${r.region}</option>`).join("");
+}
+
+async function renderCatalogue(){
+  const f = getActiveFilters();
+  const active = filtersActive(f);
+  regionsEl.innerHTML = "";
+
+  let totalMatches = 0;
+
+  for (const r of DATA){
+    const riversWithMatches = r.rivers
+      .map(riv => ({ river: riv.river, routes: riv.routes.filter(rt => matchesFilters({...rt, region:r.region, river:riv.river}, f)) }))
+      .filter(riv => riv.routes.length > 0);
+
+    if (active && riversWithMatches.length === 0) continue; // région sans résultat : cachée pendant une recherche
+
+    const routesToShow = active ? riversWithMatches : r.rivers.map(riv => ({ river: riv.river, routes: riv.routes }));
+    totalMatches += riversWithMatches.reduce((a,riv)=>a+riv.routes.length,0);
+
+    const regionDiv = document.createElement("div");
+    regionDiv.className = "region";
+    regionDiv.dataset.region = r.region;
+    if (active) regionDiv.classList.add("open"); // auto-ouvre pendant une recherche/filtre
+    const totalRoutes = r.rivers.reduce((a,riv)=>a+riv.routes.length,0);
+    regionDiv.innerHTML = `
+      <button class="region-head">
+        <span>${r.region}</span>
+        <span style="display:flex;align-items:center;">
+          <span class="count">${totalRoutes} parcours</span>
+          <span class="chevron">›</span>
+        </span>
+      </button>
+      <div class="region-body"></div>
+    `;
+    const body = regionDiv.querySelector(".region-body");
+    for (const riv of routesToShow){
+      if (riv.routes.length === 0) continue;
+      const riverDiv = document.createElement("div");
+      riverDiv.className = "river";
+      riverDiv.innerHTML = `<div class="river-name">${riv.river}</div>`;
+      for (const rt of riv.routes){
+        const card = document.createElement("div");
+        card.className = "route-card";
+        const done = await isDownloaded(rt.id);
+        card.innerHTML = `
+          <div class="route-thumb" style="background-image:url('map-${rt.id}.png')"></div>
+          <div class="route-info">
+            <div class="name">${rt.name}</div>
+            <div class="meta">${niveauMeta(rt)}</div>
+          </div>
+          <button class="dl-btn ${done?'done':''}" data-id="${rt.id}">${done?'✓ Téléchargée':'Télécharger'}</button>
+        `;
+        riverDiv.appendChild(card);
+      }
+      body.appendChild(riverDiv);
+    }
+    regionDiv.querySelector(".region-head").addEventListener("click", ()=>{
+      regionDiv.classList.toggle("open");
+    });
+    regionsEl.appendChild(regionDiv);
+  }
+
+  regionsEl.querySelectorAll(".dl-btn").forEach(btn=>{
+    btn.addEventListener("click", (e)=> downloadRoute(e.currentTarget));
+  });
+
+  const summaryEl = document.getElementById("filter-summary");
+  if (summaryEl){
+    summaryEl.innerHTML = active
+      ? `${totalMatches} parcours trouvé${totalMatches>1?'s':''}<button id="clear-filters">Réinitialiser</button>`
+      : "";
+    const clearBtn = document.getElementById("clear-filters");
+    if (clearBtn) clearBtn.addEventListener("click", clearFilters);
+  }
+
+  updateDlCount();
+
+  // remplir le select de commentaires
+  commentRouteSelect.innerHTML = allRoutes()
+    .map(rt => `<option value="${rt.id}">${rt.river} — ${rt.name}</option>`).join("");
+}
+
+function clearFilters(){
+  document.getElementById("search-input").value = "";
+  document.getElementById("filter-region").value = "";
+  document.getElementById("filter-niveau").value = "";
+  document.getElementById("filter-duree").value = "";
+  renderCatalogue();
+}
+
+let searchDebounce;
+document.getElementById("search-input").addEventListener("input", ()=>{
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(renderCatalogue, 200);
+});
+["filter-region","filter-niveau","filter-duree"].forEach(id=>{
+  document.getElementById(id).addEventListener("change", ()=> renderCatalogue());
+});
+
+async function downloadRoute(btn){
+  const id = btn.dataset.id;
+  if (btn.classList.contains("done")) {
+    selectRouteOnMap(id); // ouvre directement en plein écran (voir setFullscreen)
+    return;
+  }
+  btn.classList.add("loading");
+  btn.textContent = "Téléchargement…";
+  try {
+    const cache = await caches.open(MAPS_CACHE);
+    const resp = await fetch(`map-${id}.png`);
+    await cache.put(`./maps/${id}.png`, resp.clone());
+    btn.classList.remove("loading");
+    btn.classList.add("done");
+    btn.textContent = "✓ Téléchargée";
+    showToast("Ajoutée à ton dossier — disponible hors ligne");
+    updateDlCount();
+    renderDossier();
+  } catch(err){
+    btn.classList.remove("loading");
+    btn.textContent = "Erreur — réessayer";
+  }
+}
+
+async function deleteFromDossier(id){
+  const cache = await caches.open(MAPS_CACHE);
+  await cache.delete(`./maps/${id}.png`);
+  showToast("Retirée de ton dossier");
+  updateDlCount();
+  renderDossier();
+  renderCatalogue(); // remet le bouton "Télécharger" dans le catalogue
+}
+
+async function renderDossier(){
+  const listEl = document.getElementById("dossier-list");
+  if (!listEl) return;
+  const cache = await caches.open(MAPS_CACHE);
+  const keys = await cache.keys();
+  const downloadedIds = keys
+    .map(req => req.url.match(/\/maps\/(.+)\.png$/))
+    .filter(Boolean)
+    .map(m => m[1]);
+
+  const routesById = Object.fromEntries(allRoutes().map(r => [r.id, r]));
+  const items = downloadedIds.map(id => routesById[id]).filter(Boolean);
+
+  if (!items.length){
+    listEl.innerHTML = `<div class="dossier-empty">📂 Ton dossier est vide pour l'instant.<br>Télécharge des cartes depuis le Catalogue pour les retrouver ici, prêtes hors ligne.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = items.map(rt => `
+    <div class="route-card">
+      <div class="route-thumb" style="background-image:url('map-${rt.id}.png')"></div>
+      <div class="route-info">
+        <div class="name">${rt.name}</div>
+        <div class="meta">${rt.river} · ${rt.region}</div>
+      </div>
+      <button class="open-btn" data-open="${rt.id}">Ouvrir</button>
+      <button class="delete-btn" data-delete="${rt.id}" title="Retirer du dossier">🗑</button>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll("[data-open]").forEach(b=>{
+    b.addEventListener("click", ()=> selectRouteOnMap(b.dataset.open));
+  });
+  listEl.querySelectorAll("[data-delete]").forEach(b=>{
+    b.addEventListener("click", ()=> deleteFromDossier(b.dataset.delete));
+  });
+}
+
+async function updateDlCount(){
+  const cache = await caches.open(MAPS_CACHE);
+  const keys = await cache.keys();
+  document.getElementById("dl-count").textContent =
+    `${keys.length} carte${keys.length>1?'s':''} téléchargée${keys.length>1?'s':''}`;
+}
+
+/* ---------- Écran Carte ---------- */
+const mapFrame = document.getElementById("map-frame");
+
+/* Projette une position GPS (WGS84 lat/lon) vers un pourcentage x/y
+   sur l'image de la carte, à partir de la transformation affine du
+   GeoTIFF source (voir GEO_DATA). Gère correctement la rotation —
+   contrairement à une simple bounding box, ça reste précis même si
+   l'image n'est pas alignée nord-sud. */
+function projectLatLonToPercent(lat, lon, geo){
+  const [x, y] = proj4("WGS84", geo.crs_proj4, [lon, lat]);
+  const [a, b, c, d, e, f] = geo.transform;
+  const det = a*e - b*d;
+  const col = (e*(x - c) - b*(y - f)) / det;
+  const row = (a*(y - f) - d*(x - c)) / det;
+  const px = (col / geo.orig_width) * 100;
+  const py = ((geo.header_height + (row / geo.orig_height) * geo.content_height) / geo.total_height) * 100;
+  return { x: px, y: py, inBounds: px >= 0 && px <= 100 && py >= 0 && py <= 100 };
+}
+
+/* ---- Vue pan/zoom (façon Avenza) ---------------------------------- */
+let viewScale = 1, viewX = 0, viewY = 0;
+let fitScale = 1; // échelle "carte entière visible" — devient le zoom minimum
+let imgNaturalW = 0, imgNaturalH = 0;
+const VIEW_MAX = 6;
+let isFullscreen = false;
+let isTracking = false;
+let hasFirstFix = false;
+let lastDotPercent = { x: 50, y: 50 };
+const activePointers = new Map();
+let pinchStartDist = null, pinchStartScale = 1;
+let panStart = null;
+
+function applyTransform(animate){
+  const layer = document.getElementById("map-transform-layer");
+  if (!layer) return;
+  layer.style.transition = animate ? "transform .35s ease" : "none";
+  layer.style.transform = `translate(${viewX}px, ${viewY}px) scale(${viewScale})`;
+}
+
+/* Le calque .map-transform-layer est dimensionné à la taille NATURELLE de
+   l'image (pas étirée au cadre) — c'est ce qui permet au point GPS
+   (positionné en %) de toujours tomber au bon endroit, peu importe le
+   ratio du cadre. La "réduction" de la carte se fait via le zoom minimum
+   (fitScale), calculé pour que l'image entière rentre dans le cadre. */
+function computeFitScale(){
+  if (!mapFrame || !imgNaturalW || !imgNaturalH) return 1;
+  const rect = mapFrame.getBoundingClientRect();
+  return Math.min(rect.width / imgNaturalW, rect.height / imgNaturalH);
+}
+
+function clampPan(){
+  if (!mapFrame) return;
+  const rect = mapFrame.getBoundingClientRect();
+  const renderedW = imgNaturalW * viewScale;
+  const renderedH = imgNaturalH * viewScale;
+  if (renderedW <= rect.width){
+    viewX = (rect.width - renderedW) / 2; // image plus petite que le cadre : centrer
+  } else {
+    viewX = Math.min(0, Math.max(rect.width - renderedW, viewX));
+  }
+  if (renderedH <= rect.height){
+    viewY = (rect.height - renderedH) / 2;
+  } else {
+    viewY = Math.min(0, Math.max(rect.height - renderedH, viewY));
+  }
+}
+
+function resetView(animate){
+  fitScale = computeFitScale();
+  viewScale = fitScale;
+  viewX = 0; viewY = 0;
+  clampPan();
+  applyTransform(animate);
+}
+
+function zoomBy(factor, centerX, centerY){
+  const rect = mapFrame.getBoundingClientRect();
+  const cx = centerX !== undefined ? centerX - rect.left : rect.width / 2;
+  const cy = centerY !== undefined ? centerY - rect.top : rect.height / 2;
+  const newScale = Math.min(VIEW_MAX, Math.max(fitScale, viewScale * factor));
+  const ratio = newScale / viewScale;
+  viewX = cx - (cx - viewX) * ratio;
+  viewY = cy - (cy - viewY) * ratio;
+  viewScale = newScale;
+  clampPan();
+  applyTransform(true);
+}
+
+function recenterOnGPS(){
+  const rect = mapFrame.getBoundingClientRect();
+  const targetScale = Math.max(fitScale * 1.8, Math.min(VIEW_MAX, 2.5));
+  const px = (lastDotPercent.x / 100) * imgNaturalW;
+  const py = (lastDotPercent.y / 100) * imgNaturalH;
+  viewScale = targetScale;
+  viewX = rect.width / 2 - px * targetScale;
+  viewY = rect.height / 2 - py * targetScale;
+  clampPan();
+  applyTransform(true);
+}
+
+function setupMapGestures(){
+  if (!mapFrame) return;
+  mapFrame.addEventListener("pointerdown", (e)=>{
+    if (e.target.closest(".map-controls, .map-top-bar, .map-coords-bar")) return;
+    mapFrame.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if (activePointers.size === 1){
+      panStart = { x:e.clientX, y:e.clientY, viewX, viewY };
+    } else if (activePointers.size === 2){
+      const pts = [...activePointers.values()];
+      pinchStartDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      pinchStartScale = viewScale;
+    }
+  });
+  mapFrame.addEventListener("pointermove", (e)=>{
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if (activePointers.size === 1 && panStart){
+      viewX = panStart.viewX + (e.clientX - panStart.x);
+      viewY = panStart.viewY + (e.clientY - panStart.y);
+      clampPan();
+      applyTransform(false);
+    } else if (activePointers.size === 2 && pinchStartDist){
+      const pts = [...activePointers.values()];
+      const dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      const factor = dist / pinchStartDist;
+      const midX = (pts[0].x + pts[1].x) / 2;
+      const midY = (pts[0].y + pts[1].y) / 2;
+      const newScale = Math.min(VIEW_MAX, Math.max(fitScale, pinchStartScale * factor));
+      const ratio = newScale / viewScale;
+      const rect = mapFrame.getBoundingClientRect();
+      const cx = midX - rect.left, cy = midY - rect.top;
+      viewX = cx - (cx - viewX) * ratio;
+      viewY = cy - (cy - viewY) * ratio;
+      viewScale = newScale;
+      clampPan();
+      applyTransform(false);
+    }
+  });
+  const endPointer = (e)=>{
+    activePointers.delete(e.pointerId);
+    if (activePointers.size < 2) pinchStartDist = null;
+    if (activePointers.size === 0) panStart = null;
+  };
+  mapFrame.addEventListener("pointerup", endPointer);
+  mapFrame.addEventListener("pointercancel", endPointer);
+  mapFrame.addEventListener("pointerleave", endPointer);
+
+  // molette (desktop)
+  mapFrame.addEventListener("wheel", (e)=>{
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1.15 : 1/1.15, e.clientX, e.clientY);
+  }, { passive:false });
+
+  // double-tap pour zoomer
+  let lastTap = 0;
+  mapFrame.addEventListener("pointerup", (e)=>{
+    if (e.target.closest(".map-controls, .map-top-bar, .map-coords-bar")) return;
+    const now = Date.now();
+    if (now - lastTap < 300 && activePointers.size === 0){
+      zoomBy(viewScale < 2.5 ? 1.8 : 1/1.8, e.clientX, e.clientY);
+    }
+    lastTap = now;
+  });
+}
+setupMapGestures();
+
+/* La vue carte s'ouvre TOUJOURS en plein écran dès qu'une carte est chargée
+   (voir selectRouteOnMap) — pas de bouton à presser. On force l'écran
+   "carte" actif AVANT de passer en plein écran : sinon son parent .screen
+   est display:none et ça cache le plein écran, peu importe son
+   positionnement fixed (même bug que la première fois). Quitter ramène
+   à "Mon dossier", puisqu'il n'y a pas de vue "carte normale" séparée. */
+function setFullscreen(on){
+  isFullscreen = on;
+  if (on) switchScreen("carte");
+  mapFrame.classList.toggle("fullscreen", on);
+  document.body.classList.toggle("map-fullscreen-active", on);
+  renderMapChrome();
+  if (!on){
+    if (isTracking) stopTracking();
+    switchScreen("dossier");
+  }
+}
+
+function renderMapChrome(){
+  const existingTop = mapFrame.querySelector(".map-top-bar");
+  const existingControls = mapFrame.querySelector(".map-controls");
+  const existingCoords = mapFrame.querySelector(".map-coords-bar");
+  if (existingTop) existingTop.remove();
+  if (existingControls) existingControls.remove();
+  if (existingCoords) existingCoords.remove();
+  if (!mapFrame.querySelector(".map-transform-layer")) return; // pas de carte chargée
+
+  const topBar = document.createElement("div");
+  topBar.className = "map-top-bar";
+  topBar.innerHTML = `
+    <button class="map-exit-btn" id="map-exit-btn">✕</button>
+    <span style="display:flex; gap:6px;">
+      <span class="map-badge-floating" id="map-net-badge" style="background:rgba(13,30,48,0.82);"></span>
+    </span>
+  `;
+  mapFrame.appendChild(topBar);
+  updateMapNetBadge();
+  document.getElementById("map-exit-btn").addEventListener("click", ()=> setFullscreen(false));
+
+  const controls = document.createElement("div");
+  controls.className = "map-controls";
+  controls.innerHTML = `
+    <button id="zoom-in" title="Zoomer">+</button>
+    <button id="zoom-out" title="Dézoomer">–</button>
+    <button id="home-btn" title="Réinitialiser la vue">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5L12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 001 1H9.5v-6h5v6H17.5a1 1 0 001-1v-9"/></svg>
+    </button>
+    <button class="location-btn" id="location-btn" title="Ma position">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>
+    </button>
+  `;
+  mapFrame.appendChild(controls);
+  document.getElementById("zoom-in").addEventListener("click", ()=> zoomBy(1.4));
+  document.getElementById("zoom-out").addEventListener("click", ()=> zoomBy(1/1.4));
+  document.getElementById("home-btn").addEventListener("click", ()=> resetView(true));
+
+  const locationBtn = document.getElementById("location-btn");
+  locationBtn.classList.toggle("active", isTracking);
+  locationBtn.addEventListener("click", ()=>{
+    if (isTracking) recenterOnGPS();
+    else startTracking();
+  });
+
+  const coordsBar = document.createElement("div");
+  coordsBar.className = "map-coords-bar";
+  coordsBar.id = "coords";
+  coordsBar.textContent = isTracking ? "position — recherche…" : "Touche la mire pour suivre ta position";
+  mapFrame.appendChild(coordsBar);
+}
+
+async function selectRouteOnMap(routeId){
+  selectedRouteForMap = routeId;
+  const cache = await caches.open(MAPS_CACHE);
+  const hit = await cache.match(`./maps/${routeId}.png`);
+  if (hit){
+    const blob = await hit.blob();
+    const url = URL.createObjectURL(blob);
+    mapFrame.innerHTML = `
+      <div class="map-transform-layer" id="map-transform-layer">
+        <img src="${url}" alt="Carte hors ligne" id="map-img">
+        <div class="gps-dot" id="gps-dot" style="left:50%; top:50%; display:none;"></div>
+      </div>`;
+    setFullscreen(true); // ouvre directement en plein écran
+
+    const imgEl = document.getElementById("map-img");
+    const initFit = () => {
+      imgNaturalW = imgEl.naturalWidth;
+      imgNaturalH = imgEl.naturalHeight;
+      resetView(false); // calcule le zoom "carte entière visible" et centre
+    };
+    if (imgEl.complete && imgEl.naturalWidth){
+      initFit();
+    } else {
+      imgEl.addEventListener("load", initFit, { once:true });
+    }
+  }
+}
+
+window.addEventListener("resize", ()=>{
+  if (imgNaturalW && mapFrame.querySelector(".map-transform-layer")){
+    resetView(false);
+  }
+});
+
+function startTracking(){
+  isTracking = true;
+  hasFirstFix = false;
+  renderMapChrome(); // rebâtit les contrôles flottants (bouton position actif, barre coords)
+  const dot = document.getElementById("gps-dot");
+  // le point reste caché tant qu'aucune position réelle n'est reçue —
+  // sinon il paraît "figé au centre" comme si rien ne se passait.
+
+  const geo = GEO_DATA[selectedRouteForMap];
+
+  if ("geolocation" in navigator){
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const coordsEl = document.getElementById("coords");
+        if (coordsEl) coordsEl.textContent = `${latitude.toFixed(5)}, ${longitude.toFixed(5)} · ±${Math.round(accuracy)} m`;
+
+        if (geo && dot){
+          // Carte réellement géoréférencée : on projette la vraie position.
+          const { x, y, inBounds } = projectLatLonToPercent(latitude, longitude, geo);
+          dot.style.left = x + "%";
+          dot.style.top = y + "%";
+          dot.style.display = "block";
+          lastDotPercent = { x, y };
+          if (!inBounds && coordsEl){
+            coordsEl.textContent += " · hors de la zone couverte par cette carte";
+          }
+        } else if (dot){
+          // Carte de démo sans géoréférencement réel : simulation visuelle.
+          if (!simInterval) startSimulatedDot();
+        }
+        if (!hasFirstFix){
+          hasFirstFix = true;
+          recenterOnGPS(); // premier signal reçu : on centre directement dessus
+        }
+      },
+      err => {
+        const coordsEl = document.getElementById("coords");
+        if (coordsEl) coordsEl.textContent = "Position indisponible — simulation activée";
+        if (!geo) startSimulatedDot();
+      },
+      { enableHighAccuracy:true }
+    );
+    if (!geo) startSimulatedDot(); // anime le point sur les cartes de démo non géoréférencées
+  } else {
+    const coordsEl = document.getElementById("coords");
+    if (coordsEl) coordsEl.textContent = "Géolocalisation non supportée — simulation";
+    if (!geo) startSimulatedDot();
+  }
+}
+
+function startSimulatedDot(){
+  const dot = document.getElementById("gps-dot");
+  if (!dot) return;
+  let t = 0;
+  simInterval = setInterval(()=>{
+    t += 0.12;
+    const x = 20 + (Math.sin(t)*0.5+0.5)*60;
+    const y = 35 + Math.sin(t*1.7)*18;
+    dot.style.left = x+"%";
+    dot.style.top = y+"%";
+    dot.style.display = "block";
+    lastDotPercent = { x, y };
+    if (!hasFirstFix){
+      hasFirstFix = true;
+      recenterOnGPS();
+    }
+  }, 500);
+}
+
+function stopTracking(){
+  isTracking = false;
+  hasFirstFix = false;
+  if (watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+  if (simInterval){ clearInterval(simInterval); simInterval = null; }
+  const dot = document.getElementById("gps-dot");
+  if (dot) dot.style.display = "none"; // on ne l'affiche pas quand le suivi est arrêté
+  renderMapChrome();
+  const coordsEl = document.getElementById("coords");
+  if (coordsEl) coordsEl.textContent = "GPS arrêté";
+}
+
+/* ---------- Communauté (démo locale, à brancher sur un backend) ---------- */
+const commentsEl = document.getElementById("comments");
+const SEED_COMMENTS = [];
+
+function loadComments(){
+  const stored = JSON.parse(localStorage.getItem("rb-comments") || "null");
+  return stored || SEED_COMMENTS;
+}
+function saveComments(list){
+  localStorage.setItem("rb-comments", JSON.stringify(list));
+}
+
+function renderComments(){
+  const list = loadComments();
+  const routesById = Object.fromEntries(allRoutes().map(r=>[r.id, r]));
+  commentsEl.innerHTML = list.slice().reverse().map(c=>{
+    const rt = routesById[c.routeId];
+    return `<div class="comment">
+      <span class="who">${c.who}</span><span class="route-tag">${rt ? rt.river : c.routeId}</span>
+      <p>${c.text}</p>
+    </div>`;
+  }).join("");
+}
+
+document.getElementById("comment-submit").addEventListener("click", ()=>{
+  const text = document.getElementById("comment-text").value.trim();
+  if (!text) return;
+  const list = loadComments();
+  list.push({ who:"Toi", routeId: commentRouteSelect.value, text });
+  saveComments(list);
+  document.getElementById("comment-text").value = "";
+  renderComments();
+  showToast("Commentaire publié");
+});
+
+/* ---------- Navigation ---------- */
+function switchScreen(name){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById(`screen-${name}`).classList.add("active");
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active", b.dataset.screen===name));
+  const isHome = name === "accueil";
+  document.querySelector("nav.bottom").style.display = isHome ? "none" : "flex";
+  document.getElementById("status-strip").style.display = isHome ? "none" : "flex";
+  document.getElementById("app").style.paddingBottom = isHome ? "0" : "76px";
+}
+document.querySelectorAll(".nav-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=> {
+    switchScreen(btn.dataset.screen);
+    if (btn.dataset.screen === "dossier"){
+      renderDossier();
+    }
+  });
+});
+document.getElementById("hero-cta").addEventListener("click", ()=> switchScreen("catalogue"));
+document.getElementById("home-link").addEventListener("click", ()=> switchScreen("accueil"));
+
+/* ---------- Tuto en accordéon (fermé par défaut) ---------- */
+document.getElementById("howto-toggle").addEventListener("click", ()=>{
+  document.getElementById("howto-toggle").closest(".howto").classList.toggle("open");
+});
+
+document.getElementById("open-terms").addEventListener("click", ()=>{
+  document.getElementById("terms-modal").classList.add("show");
+});
+document.getElementById("close-terms").addEventListener("click", ()=>{
+  document.getElementById("terms-modal").classList.remove("show");
+});
+document.getElementById("terms-modal").addEventListener("click", (e)=>{
+  if (e.target.id === "terms-modal") e.target.classList.remove("show");
+});
+
+function updateHeroStats(){
+  const el = document.getElementById("hero-stats");
+  if (!el) return;
+  const nRoutes = allRoutes().length;
+  const nRegions = DATA.length;
+  el.innerHTML = `
+    <div><b>${nRegions}</b>régions</div>
+    <div><b>${nRoutes}</b>parcours</div>
+  `;
+}
+
+function openRegion(regionName){
+  switchScreen("catalogue");
+  document.querySelectorAll(".region").forEach(r => r.classList.remove("open"));
+  const target = [...document.querySelectorAll(".region")].find(r => r.dataset.region === regionName);
+  if (target){
+    target.classList.add("open");
+    target.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
+}
+
+/* ---------- Statut réseau ---------- */
+function updateMapNetBadge(){
+  const badge = document.getElementById("map-net-badge");
+  if (!badge) return;
+  const online = navigator.onLine;
+  badge.textContent = online ? "🟢 En ligne" : "🔴 Hors ligne — carte locale";
+}
+
+function updateNetStatus(){
+  const online = navigator.onLine;
+  document.getElementById("net-dot").classList.toggle("off", !online);
+  document.getElementById("net-label").textContent = online ? "En ligne" : "Hors ligne";
+}
+window.addEventListener("online", ()=>{ updateNetStatus(); updateMapNetBadge(); });
+window.addEventListener("offline", ()=>{ updateNetStatus(); updateMapNetBadge(); });
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove("show"), 2200);
+}
+
+/* ---------- Installation PWA ---------- */
+let deferredPrompt;
+window.addEventListener("beforeinstallprompt", (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById("install-btn").style.display = "flex";
+});
+document.getElementById("install-btn").addEventListener("click", async ()=>{
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById("install-btn").style.display = "none";
+});
+
+/* ---------- Service worker ---------- */
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./service-worker.js").catch(console.error);
+  });
+}
+
+/* ---------- Init ---------- */
+updateNetStatus();
+switchScreen("accueil");
+loadCatalog().then(() => { populateRegionFilter(); return renderCatalogue(); }).then(()=>{
+  renderComments();
+  updateHeroStats();
+  renderDossier();
+});
+</script>
+</body>
+</html>
